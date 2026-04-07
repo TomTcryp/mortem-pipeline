@@ -115,6 +115,27 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
 .file-content { padding:12px; background:rgba(0,0,0,.3); border-top:1px solid var(--border); }
 .file-content pre { margin:0; font-size:11px; line-height:1.4; font-family:'Courier New',monospace; color:var(--text-muted); white-space:pre-wrap; word-wrap:break-word; }
 
+.fact-check-bar { padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(189,134,86,.05); display:flex; align-items:center; gap:12px; }
+.fact-check-btn { padding:8px 16px; background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; font-weight:600; border-radius:6px; font-size:13px; }
+.fact-check-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 4px 12px rgba(99,102,241,.3); }
+.fact-check-btn.checking { background:linear-gradient(135deg,#f59e0b,#d97706); }
+.auto-regen-toggle { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); }
+.toggle-switch { position:relative; width:36px; height:20px; background:var(--border); border-radius:10px; cursor:pointer; transition:background .2s; }
+.toggle-switch.active { background:var(--success); }
+.toggle-switch::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:transform .2s; }
+.toggle-switch.active::after { transform:translateX(16px); }
+.fact-check-results { padding:16px; background:rgba(0,0,0,.2); border-bottom:1px solid var(--border); max-height:300px; overflow-y:auto; }
+.fact-result-section { margin-bottom:12px; }
+.fact-result-section h5 { font-size:12px; font-weight:600; text-transform:uppercase; color:var(--bronze); margin-bottom:6px; letter-spacing:.3px; }
+.fact-result-item { padding:8px 12px; background:rgba(189,134,86,.05); border-left:3px solid var(--bronze); border-radius:0 4px 4px 0; margin-bottom:4px; font-size:12px; line-height:1.5; }
+.fact-result-item.correction { border-left-color:var(--warning); }
+.fact-result-item.new-info { border-left-color:var(--success); }
+.accuracy-badge { padding:4px 10px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase; }
+.accuracy-badge.high { background:rgba(16,185,129,.15); color:var(--success); }
+.accuracy-badge.medium { background:rgba(245,158,11,.15); color:var(--warning); }
+.accuracy-badge.low { background:rgba(239,68,68,.15); color:var(--error); }
+.regen-status { padding:8px 16px; background:rgba(16,185,129,.1); border-bottom:1px solid rgba(16,185,129,.3); font-size:12px; color:var(--success); display:flex; align-items:center; gap:8px; }
+
 .modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,25,35,.8); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter:blur(4px); }
 .modal { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:32px; max-width:500px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.5); animation:slideUp .3s ease-out; }
 .modal h2 { margin:0 0 8px; font-size:20px; }
@@ -172,10 +193,22 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
           <button class="tab" data-tab="files">Files</button>
         </div>
         <div class="tab-content">
-          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">📊</div><p>Demo preview will appear here</p></div></div>
-          <div class="preview-tab hidden" id="tab-meeting-prep"><div class="placeholder"><div class="icon">📋</div><p>Meeting prep document will appear here</p></div></div>
-          <div class="outreach-tab hidden" id="tab-outreach"><div class="placeholder"><div class="icon">📧</div><p>Outreach messages will appear here</p></div></div>
-          <div class="files-tab hidden" id="tab-files"><div class="placeholder"><div class="icon">📁</div><p>Generated files will appear here</p></div></div>
+          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">ð</div><p>Demo preview will appear here</p></div></div>
+          <div class="preview-tab hidden" id="tab-meeting-prep">
+            <div class="fact-check-bar hidden" id="factCheckBar">
+              <button class="fact-check-btn" id="factCheckBtn" onclick="runFactCheck()">Fact-Check with Perplexity</button>
+              <div class="auto-regen-toggle">
+                <div class="toggle-switch" id="autoRegenToggle" onclick="this.classList.toggle('active')"></div>
+                <span>Auto-regenerate after check</span>
+              </div>
+              <span id="factCheckStatus" style="font-size:12px;color:var(--text-muted);margin-left:auto;"></span>
+            </div>
+            <div class="fact-check-results hidden" id="factCheckResults"></div>
+            <div class="regen-status hidden" id="regenStatus"><div class="spinner" style="width:12px;height:12px;border-width:2px;"></div> Regenerating with fact-checked data...</div>
+            <div id="meetingPrepContent"><div class="placeholder"><div class="icon">ð</div><p>Meeting prep document will appear here</p></div></div>
+          </div>
+          <div class="outreach-tab hidden" id="tab-outreach"><div class="placeholder"><div class="icon">ð§</div><p>Outreach messages will appear here</p></div></div>
+          <div class="files-tab hidden" id="tab-files"><div class="placeholder"><div class="icon">ð</div><p>Generated files will appear here</p></div></div>
         </div>
       </div>
     </div>
@@ -188,28 +221,30 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
     <p class="desc">Configure your API credentials. These are stored locally in your browser.</p>
     <div class="field"><label>Anthropic API Key</label><input type="password" id="apiKeyInput" placeholder="sk-ant-..."><p class="hint">Used for research, prompt generation, and outreach. Falls back to server env var if not set.</p></div>
     <div class="field"><label>Netlify Token</label><input type="password" id="netlifyTokenInput" placeholder="nfl_..."><p class="hint">Used for deploying demo sites. Falls back to server env var if not set.</p></div>
+    <div class="field"><label>Perplexity API Key</label><input type="password" id="perplexityKeyInput" placeholder="pplx-..."><p class="hint">Used for fact-checking meeting prep docs with live internet research.</p></div>
     <div class="modal-actions"><button class="cancel-btn" id="cancelSettings">Cancel</button><button class="save-btn" id="saveSettings">Save Settings</button></div>
   </div>
 </div>
 
 <script>
 const PHASES = [
-  { id:1, label:'Research', icon:'🔍' },
-  { id:2, label:'Knowledge Doc', icon:'📄' },
-  { id:3, label:'Sarah Prompt', icon:'✍️' },
-  { id:4, label:'Demo Build', icon:'🔨' },
-  { id:5, label:'Deploy', icon:'🚀' },
-  { id:6, label:'Meeting Prep', icon:'📋' },
-  { id:7, label:'Outreach', icon:'📧' },
-  { id:8, label:'Complete', icon:'✓' },
+  { id:1, label:'Research', icon:'ð' },
+  { id:2, label:'Knowledge Doc', icon:'ð' },
+  { id:3, label:'Sarah Prompt', icon:'âï¸' },
+  { id:4, label:'Demo Build', icon:'ð¨' },
+  { id:5, label:'Deploy', icon:'ð' },
+  { id:6, label:'Meeting Prep', icon:'ð' },
+  { id:7, label:'Outreach', icon:'ð§' },
+  { id:8, label:'Complete', icon:'â' },
 ];
 
 let prospects = JSON.parse(localStorage.getItem('prospects') || '[]');
 let apiKey = localStorage.getItem('apiKey') || '';
 let netlifyToken = localStorage.getItem('netlifyToken') || '';
+let perplexityKey = localStorage.getItem('perplexityKey') || '';
 let isRunning = false;
 let phaseStatuses = {};
-let pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, outreach:null };
+let pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
 let currentProspect = null;
 let failedPhaseId = null;
 
@@ -228,8 +263,8 @@ function renderPhases() {
     div.className = 'phase' + (status === 'running' ? ' running' : '') + (status === 'done' ? ' done' : '') + (status === 'error' ? ' error' : '');
     let statusHtml = '';
     if (status === 'running') statusHtml = '<div class="spinner"></div>';
-    else if (status === 'done') statusHtml = '<span class="checkmark">✓</span>';
-    else if (status === 'error') statusHtml = '<span class="error-mark">✕</span>';
+    else if (status === 'done') statusHtml = '<span class="checkmark">â</span>';
+    else if (status === 'error') statusHtml = '<span class="error-mark">â</span>';
     div.innerHTML = '<div class="phase-icon">' + phase.icon + '</div><div class="phase-label">' + phase.label + '</div><div class="phase-status">' + statusHtml + '</div>';
     c.appendChild(div);
     if (idx < PHASES.length - 1) { const d = document.createElement('div'); d.className = 'phase-divider'; c.appendChild(d); }
@@ -258,6 +293,7 @@ function getHeaders() {
   const h = { 'Content-Type':'application/json' };
   if (apiKey) h['x-api-key-override'] = apiKey;
   if (netlifyToken) h['x-netlify-token-override'] = netlifyToken;
+  if (perplexityKey) h['x-perplexity-key-override'] = perplexityKey;
   return h;
 }
 
@@ -278,7 +314,7 @@ async function launchPipeline() {
   document.getElementById('launchBtn').textContent = 'Running...';
   initPhases();
   document.getElementById('logContainer').innerHTML = '';
-  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, outreach:null };
+  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
   failedPhaseId = null;
 
   const prospectName = new URL(url).hostname.replace('www.', '');
@@ -391,6 +427,157 @@ function loadProspect(p) {
   renderResults();
 }
 
+async function runFactCheck() {
+  if (!pipelineData.meetingPrep || !pipelineData.meetingPrep.html) {
+    showError('No meeting prep document to fact-check');
+    return;
+  }
+
+  const btn = document.getElementById('factCheckBtn');
+  const status = document.getElementById('factCheckStatus');
+  btn.disabled = true;
+  btn.textContent = 'Checking...';
+  btn.classList.add('checking');
+  status.textContent = 'Sending to Perplexity for live research...';
+
+  try {
+    const result = await apiCall('fact-check', {
+      html: pipelineData.meetingPrep.html,
+      research: pipelineData.research
+    });
+
+    pipelineData.factCheck = result;
+    renderFactCheckResults(result);
+    status.textContent = 'Fact-check complete';
+
+    // Check if auto-regenerate is on
+    const autoRegen = document.getElementById('autoRegenToggle').classList.contains('active');
+    if (autoRegen) {
+      await regenerateWithFactCheck();
+    }
+  } catch (err) {
+    showError('Fact-check failed: ' + err.message);
+    status.textContent = 'Failed';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Fact-Check with Perplexity';
+    btn.classList.remove('checking');
+  }
+}
+
+async function regenerateWithFactCheck() {
+  if (!pipelineData.factCheck) return;
+
+  const regenStatus = document.getElementById('regenStatus');
+  regenStatus.classList.remove('hidden');
+
+  try {
+    const contactName = document.getElementById('contactInput').value.trim() || null;
+    const contactRole = document.getElementById('roleInput').value.trim() || null;
+
+    const result = await apiCall('regenerate-prep', {
+      research: pipelineData.research,
+      demoUrl: pipelineData.deployUrl,
+      contactName,
+      contactRole,
+      factCheckResults: pipelineData.factCheck.parsed || pipelineData.factCheck.raw,
+      originalHtml: pipelineData.meetingPrep.html
+    });
+
+    pipelineData.meetingPrep = result;
+    addLog('Meeting prep regenerated with fact-checked data', 6);
+
+    // Redeploy
+    const siteName = pipelineData.research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-meeting-prep';
+    const deployResult = await apiCall('deploy', { html: result.html, siteName });
+    pipelineData.meetingPrepUrl = deployResult.url;
+    addLog('Updated meeting prep deployed to ' + deployResult.url, 6);
+
+    renderMeetingPrepTab();
+  } catch (err) {
+    showError('Regeneration failed: ' + err.message);
+  } finally {
+    regenStatus.classList.add('hidden');
+  }
+}
+
+function renderFactCheckResults(result) {
+  const container = document.getElementById('factCheckResults');
+  container.classList.remove('hidden');
+
+  if (!result.parsed) {
+    container.innerHTML = '<div class="fact-result-section"><h5>Raw Results</h5><div class="fact-result-item"><pre style="white-space:pre-wrap;font-size:11px;margin:0;">' + (result.raw || 'No results').replace(/</g, '&lt;') + '</pre></div></div>';
+    return;
+  }
+
+  const p = result.parsed;
+  let html = '';
+
+  // Accuracy badge
+  if (p.overall_accuracy) {
+    html += '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:var(--text-muted);">Overall accuracy:</span><span class="accuracy-badge ' + p.overall_accuracy + '">' + p.overall_accuracy + '</span></div>';
+  }
+
+  // Summary
+  if (p.summary) {
+    html += '<div class="fact-result-section"><h5>Summary</h5><div class="fact-result-item">' + p.summary + '</div></div>';
+  }
+
+  // Corrections
+  if (p.corrections && p.corrections.length > 0) {
+    html += '<div class="fact-result-section"><h5>Corrections Needed</h5>';
+    p.corrections.forEach(c => {
+      html += '<div class="fact-result-item correction"><strong>Claim:</strong> ' + (c.claim || '').replace(/</g, '&lt;') + '<br><strong>Reality:</strong> ' + (c.reality || '').replace(/</g, '&lt;') + (c.source ? '<br><em style="color:var(--text-muted)">Source: ' + c.source.replace(/</g, '&lt;') + '</em>' : '') + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // New information
+  if (p.new_information && p.new_information.length > 0) {
+    html += '<div class="fact-result-section"><h5>New Information Found</h5>';
+    p.new_information.forEach(n => {
+      html += '<div class="fact-result-item new-info"><strong>' + (n.topic || '').replace(/</g, '&lt;') + ':</strong> ' + (n.detail || '').replace(/</g, '&lt;') + (n.source ? '<br><em style="color:var(--text-muted)">Source: ' + n.source.replace(/</g, '&lt;') + '</em>' : '') + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Competitors
+  if (p.missing_competitors && p.missing_competitors.length > 0) {
+    html += '<div class="fact-result-section"><h5>Competitors Found</h5>';
+    p.missing_competitors.forEach(c => {
+      html += '<div class="fact-result-item new-info"><strong>' + (c.name || '').replace(/</g, '&lt;') + '</strong>' + (c.url ? ' - <a href="' + c.url + '" target="_blank">' + c.url + '</a>' : '') + (c.notes ? '<br>' + c.notes.replace(/</g, '&lt;') : '') + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Verified facts
+  if (p.verified_facts && p.verified_facts.length > 0) {
+    html += '<div class="fact-result-section"><h5>Verified Facts (' + p.verified_facts.length + ')</h5>';
+    p.verified_facts.forEach(f => {
+      html += '<div class="fact-result-item" style="border-left-color:var(--success);">â ' + (f || '').replace(/</g, '&lt;') + '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Regenerate button if not auto
+  if (!document.getElementById('autoRegenToggle').classList.contains('active')) {
+    html += '<div style="padding:12px 0;"><button class="fact-check-btn" onclick="regenerateWithFactCheck()" style="background:linear-gradient(135deg,var(--success),#059669);">Regenerate Document with These Findings</button></div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function renderMeetingPrepTab() {
+  const content = document.getElementById('meetingPrepContent');
+  if (pipelineData.meetingPrepUrl) {
+    content.innerHTML = '<div class="preview-link"><a href="' + pipelineData.meetingPrepUrl + '" target="_blank">View live: ' + pipelineData.meetingPrepUrl + '</a></div><iframe src="' + pipelineData.meetingPrepUrl + '" class="preview-iframe" title="Meeting Prep"></iframe>';
+  }
+  // Show fact-check bar if meeting prep exists
+  if (pipelineData.meetingPrep) {
+    document.getElementById('factCheckBar').classList.remove('hidden');
+  }
+}
+
 function renderResults() {
   // Preview tab
   const previewTab = document.getElementById('tab-preview');
@@ -399,20 +586,17 @@ function renderResults() {
   }
 
   // Meeting Prep tab
-  const meetingPrepTab = document.getElementById('tab-meeting-prep');
-  if (pipelineData.meetingPrepUrl) {
-    meetingPrepTab.innerHTML = '<div class="preview-link"><a href="' + pipelineData.meetingPrepUrl + '" target="_blank">View live: ' + pipelineData.meetingPrepUrl + '</a></div><iframe src="' + pipelineData.meetingPrepUrl + '" class="preview-iframe" title="Meeting Prep"></iframe>';
-  }
+  renderMeetingPrepTab();
 
   // Outreach tab
   const outreachTab = document.getElementById('tab-outreach');
   if (pipelineData.outreach) {
     let html = '';
     const o = pipelineData.outreach;
-    if (o.email) html += makeOutreachCard('Email', '📧', typeof o.email === 'string' ? o.email : o.email.subject + '\n\n' + o.email.body);
-    if (o.linkedin) html += makeOutreachCard('LinkedIn', '💼', o.linkedin);
-    if (o.voicemail) html += makeOutreachCard('Voicemail Script', '📱', o.voicemail);
-    if (o.sms) html += makeOutreachCard('SMS', '💬', o.sms);
+    if (o.email) html += makeOutreachCard('Email', 'ð§', typeof o.email === 'string' ? o.email : o.email.subject + '\n\n' + o.email.body);
+    if (o.linkedin) html += makeOutreachCard('LinkedIn', 'ð¼', o.linkedin);
+    if (o.voicemail) html += makeOutreachCard('Voicemail Script', 'ð±', o.voicemail);
+    if (o.sms) html += makeOutreachCard('SMS', 'ð¬', o.sms);
     outreachTab.innerHTML = html;
   }
 
@@ -420,11 +604,11 @@ function renderResults() {
   const filesTab = document.getElementById('tab-files');
   if (pipelineData.research || pipelineData.prompt || pipelineData.demo) {
     let html = '';
-    if (pipelineData.research) html += makeFileItem('research.json', '📄', JSON.stringify(pipelineData.research, null, 2));
-    if (pipelineData.prompt) html += makeFileItem('sarah-prompt.txt', '✍️', pipelineData.prompt);
-    if (pipelineData.demo) html += makeFileItem('demo.html', '🌐', typeof pipelineData.demo === 'string' ? pipelineData.demo : JSON.stringify(pipelineData.demo, null, 2));
-    if (pipelineData.meetingPrep) html += makeFileItem('meeting-prep.html', '📋', typeof pipelineData.meetingPrep === 'string' ? pipelineData.meetingPrep : (pipelineData.meetingPrep.html || JSON.stringify(pipelineData.meetingPrep, null, 2)));
-    if (pipelineData.outreach) html += makeFileItem('outreach.json', '📧', JSON.stringify(pipelineData.outreach, null, 2));
+    if (pipelineData.research) html += makeFileItem('research.json', 'ð', JSON.stringify(pipelineData.research, null, 2));
+    if (pipelineData.prompt) html += makeFileItem('sarah-prompt.txt', 'âï¸', pipelineData.prompt);
+    if (pipelineData.demo) html += makeFileItem('demo.html', 'ð', typeof pipelineData.demo === 'string' ? pipelineData.demo : JSON.stringify(pipelineData.demo, null, 2));
+    if (pipelineData.meetingPrep) html += makeFileItem('meeting-prep.html', 'ð', typeof pipelineData.meetingPrep === 'string' ? pipelineData.meetingPrep : (pipelineData.meetingPrep.html || JSON.stringify(pipelineData.meetingPrep, null, 2)));
+    if (pipelineData.outreach) html += makeFileItem('outreach.json', 'ð§', JSON.stringify(pipelineData.outreach, null, 2));
     filesTab.innerHTML = html;
   }
 }
@@ -437,7 +621,7 @@ function makeOutreachCard(title, icon, content) {
 function makeFileItem(name, icon, content) {
   const id = 'file-' + name.replace(/[^a-z0-9]/gi, '-');
   const escaped = (content || '').substring(0, 500).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return '<div class="file-item"><button class="file-btn" onclick="toggleFile(\'' + id + '\')">' + icon + ' <span style="flex:1;font-family:monospace">' + name + '</span> <span style="color:var(--text-muted);font-size:10px">▶</span></button><div class="file-content hidden" id="' + id + '"><pre>' + escaped + (content && content.length > 500 ? '...' : '') + '</pre></div></div>';
+  return '<div class="file-item"><button class="file-btn" onclick="toggleFile(\'' + id + '\')">' + icon + ' <span style="flex:1;font-family:monospace">' + name + '</span> <span style="color:var(--text-muted);font-size:10px">â¶</span></button><div class="file-content hidden" id="' + id + '"><pre>' + escaped + (content && content.length > 500 ? '...' : '') + '</pre></div></div>';
 }
 
 function toggleFile(id) { document.getElementById(id).classList.toggle('hidden'); }
@@ -445,7 +629,7 @@ function toggleFile(id) { document.getElementById(id).classList.toggle('hidden')
 function copyText(btn, b64) {
   const text = decodeURIComponent(escape(atob(b64)));
   navigator.clipboard.writeText(text);
-  btn.textContent = '✓ Copied';
+  btn.textContent = 'â Copied';
   setTimeout(() => btn.textContent = 'Copy', 2000);
 }
 
@@ -467,20 +651,25 @@ document.getElementById('newPipelineBtn').addEventListener('click', () => {
   document.getElementById('contactInput').value = '';
   document.getElementById('roleInput').value = '';
   currentProspect = null;
-  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, outreach:null };
+  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
   initPhases();
   document.getElementById('logContainer').innerHTML = '<div class="empty-log">No activity yet. Launch a pipeline to get started.</div>';
   hideError();
-  document.getElementById('tab-preview').innerHTML = '<div class="placeholder"><div class="icon">📊</div><p>Demo preview will appear here</p></div>';
-  document.getElementById('tab-meeting-prep').innerHTML = '<div class="placeholder"><div class="icon">📋</div><p>Meeting prep document will appear here</p></div>';
-  document.getElementById('tab-outreach').innerHTML = '<div class="placeholder"><div class="icon">📧</div><p>Outreach messages will appear here</p></div>';
-  document.getElementById('tab-files').innerHTML = '<div class="placeholder"><div class="icon">📁</div><p>Generated files will appear here</p></div>';
+  document.getElementById('tab-preview').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Demo preview will appear here</p></div>';
+  document.getElementById('meetingPrepContent').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Meeting prep document will appear here</p></div>';
+  document.getElementById('factCheckBar').classList.add('hidden');
+  document.getElementById('factCheckResults').classList.add('hidden');
+  document.getElementById('factCheckResults').innerHTML = '';
+  document.getElementById('regenStatus').classList.add('hidden');
+  document.getElementById('tab-outreach').innerHTML = '<div class="placeholder"><div class="icon">ð§</div><p>Outreach messages will appear here</p></div>';
+  document.getElementById('tab-files').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Generated files will appear here</p></div>';
   renderProspects();
 });
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('apiKeyInput').value = apiKey;
   document.getElementById('netlifyTokenInput').value = netlifyToken;
+  document.getElementById('perplexityKeyInput').value = perplexityKey;
   document.getElementById('settingsModal').classList.remove('hidden');
 });
 document.getElementById('cancelSettings').addEventListener('click', () => document.getElementById('settingsModal').classList.add('hidden'));
@@ -488,478 +677,10 @@ document.getElementById('settingsModal').addEventListener('click', e => { if (e.
 document.getElementById('saveSettings').addEventListener('click', () => {
   apiKey = document.getElementById('apiKeyInput').value;
   netlifyToken = document.getElementById('netlifyTokenInput').value;
+  perplexityKey = document.getElementById('perplexityKeyInput').value;
   localStorage.setItem('apiKey', apiKey);
   localStorage.setItem('netlifyToken', netlifyToken);
-  document.getElementById('settingsModal').classList.add('hidden');
-});
-document.getElementById('retryBtn').addEventListener('click', () => { if (failedPhaseId && !isRunning) launchPipeline(); });
-
-// Init
-initPhases();
-renderProspects();
-</script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mortem AI - Pipeline</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Lato:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-:root {
-  --ink: #22364a;
-  --navy: #213761;
-  --bronze: #BD8656;
-  --bronze-light: #d4a373;
-  --dark-bg: #0f1923;
-  --card-bg: #162232;
-  --text: #e8e6e3;
-  --text-muted: #8a9bb0;
-  --border: #1e3048;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-}
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { width:100%; height:100%; background:var(--dark-bg); color:var(--text); font-family:'Lato',sans-serif; font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased; }
-h1,h2,h3,h4 { font-family:'Montserrat',sans-serif; font-weight:600; line-height:1.3; }
-a { color:var(--bronze); text-decoration:none; } a:hover { color:var(--bronze-light); }
-button { font-family:'Lato',sans-serif; border:none; cursor:pointer; transition:all .2s ease; border-radius:6px; font-weight:500; }
-button:disabled { opacity:.5; cursor:not-allowed; }
-input { font-family:'Lato',sans-serif; background:var(--card-bg); color:var(--text); border:1px solid var(--border); padding:10px 14px; border-radius:6px; font-size:14px; }
-input::placeholder { color:var(--text-muted); } input:focus { outline:none; border-color:var(--bronze); }
-
-#app { display:flex; width:100%; height:100vh; overflow:hidden; }
-
-.sidebar { width:280px; background:linear-gradient(180deg,var(--card-bg) 0%,var(--dark-bg) 100%); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
-.logo { padding:24px 20px; border-bottom:1px solid var(--border); text-align:center; }
-.logo h2 { font-size:20px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-.new-btn { margin:16px; padding:12px 16px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); font-weight:600; border-radius:8px; font-size:14px; box-shadow:0 4px 12px rgba(189,134,86,.15); }
-.new-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 6px 16px rgba(189,134,86,.25); }
-.prospects-label { padding:12px 16px 8px; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); letter-spacing:.5px; }
-.prospects-list { flex:1; overflow-y:auto; }
-.prospect-item { width:100%; padding:12px 16px; background:transparent; border:none; cursor:pointer; display:flex; align-items:center; gap:12px; border-left:3px solid transparent; text-align:left; color:var(--text); font-size:13px; }
-.prospect-item:hover { background:rgba(189,134,86,.05); }
-.prospect-item.active { background:rgba(189,134,86,.1); border-left-color:var(--bronze); }
-.prospect-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-.prospect-dot.deployed { background:var(--success); box-shadow:0 0 8px rgba(16,185,129,.4); }
-.prospect-dot.in-progress { background:var(--warning); animation:pulse 2s ease-in-out infinite; }
-.empty-prospects { padding:20px 16px; text-align:center; color:var(--text-muted); font-size:13px; }
-.settings-btn { margin:16px; margin-top:auto; padding:10px 14px; background:var(--card-bg); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:13px; }
-.settings-btn:hover { background:rgba(189,134,86,.1); border-color:var(--bronze); }
-
-.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.url-bar { padding:20px 24px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; background:linear-gradient(180deg,rgba(189,134,86,.02),transparent); }
-.url-bar input { flex:1; padding:12px 16px; font-size:14px; border-radius:8px; }
-.url-bar input:focus { border-color:var(--bronze); box-shadow:0 0 0 3px rgba(189,134,86,.1); }
-.launch-btn { padding:12px 28px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); font-weight:600; border-radius:8px; font-size:14px; white-space:nowrap; box-shadow:0 4px 12px rgba(189,134,86,.15); }
-.launch-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 6px 16px rgba(189,134,86,.25); }
-
-.error-banner { padding:14px 24px; background:rgba(239,68,68,.1); border-bottom:1px solid rgba(239,68,68,.3); color:#fca5a5; display:flex; align-items:center; justify-content:space-between; font-size:13px; gap:16px; }
-.error-banner button { padding:6px 12px; background:rgba(239,68,68,.2); border:1px solid rgba(239,68,68,.4); color:#fca5a5; border-radius:4px; font-size:12px; }
-
-.phase-tracker { padding:20px 24px; border-bottom:1px solid var(--border); }
-.phases { display:flex; align-items:center; justify-content:space-between; }
-.phase { flex:1; padding:16px 12px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; transition:all .3s ease; }
-.phase.running { background:linear-gradient(135deg,rgba(245,158,11,.05),rgba(189,134,86,.05)); border-color:var(--warning); box-shadow:0 0 16px rgba(245,158,11,.1); animation:glow 2s ease-in-out infinite; }
-.phase.done { background:linear-gradient(135deg,rgba(16,185,129,.05),rgba(189,134,86,.05)); border-color:var(--success); }
-.phase.error { background:linear-gradient(135deg,rgba(239,68,68,.05),rgba(189,134,86,.05)); border-color:var(--error); }
-.phase-icon { font-size:24px; }
-.phase-label { font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); letter-spacing:.3px; }
-.phase.running .phase-label { color:var(--warning); }
-.phase.done .phase-label { color:var(--success); }
-.phase.error .phase-label { color:var(--error); }
-.phase-status { height:20px; display:flex; align-items:center; justify-content:center; }
-.spinner { width:14px; height:14px; border:2px solid rgba(245,158,11,.3); border-top-color:var(--warning); border-radius:50%; animation:spin 1s linear infinite; }
-.checkmark { color:var(--success); font-weight:bold; font-size:16px; }
-.error-mark { color:var(--error); font-weight:bold; font-size:16px; }
-.phase-divider { flex:0 0 12px; height:2px; background:var(--border); margin:0 -6px; }
-
-.results { flex:1; display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:20px 24px; overflow:hidden; }
-.activity-feed { display:flex; flex-direction:column; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-.activity-title { padding:16px 20px; border-bottom:1px solid var(--border); font-size:14px; font-weight:600; }
-.log-container { flex:1; overflow-y:auto; }
-.log-entry { padding:12px 16px; border-bottom:1px solid rgba(30,48,72,.5); display:flex; align-items:center; gap:12px; font-size:12px; animation:slideUp .3s ease-out; }
-.log-time { color:var(--text-muted); font-weight:500; flex-shrink:0; font-family:'Courier New',monospace; font-size:11px; }
-.log-phase { background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); padding:3px 8px; border-radius:4px; font-weight:600; font-size:10px; flex-shrink:0; text-transform:uppercase; }
-.log-message { color:var(--text); flex:1; word-break:break-word; }
-.empty-log { padding:40px 20px; text-align:center; color:var(--text-muted); font-size:13px; display:flex; align-items:center; justify-content:center; height:100%; }
-
-.results-panel { display:flex; flex-direction:column; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
-.tabs-header { display:flex; gap:4px; padding:8px 12px; border-bottom:1px solid var(--border); background:rgba(30,48,72,.3); }
-.tab { flex:1; padding:10px 14px; background:transparent; color:var(--text-muted); border:none; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer; }
-.tab:hover { background:rgba(189,134,86,.1); }
-.tab.active { background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); }
-.tab-content { flex:1; overflow:hidden; display:flex; flex-direction:column; }
-
-.preview-tab { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.preview-link { padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(189,134,86,.05); font-size:12px; }
-.preview-link a { word-break:break-all; }
-.preview-iframe { flex:1; border:none; background:var(--dark-bg); }
-.placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--text-muted); font-size:13px; }
-.placeholder .icon { font-size:32px; }
-
-.outreach-tab { flex:1; overflow-y:auto; padding:16px; }
-.outreach-card { background:rgba(189,134,86,.05); border:1px solid rgba(189,134,86,.2); border-radius:8px; overflow:hidden; margin-bottom:16px; }
-.card-header { padding:12px 14px; border-bottom:1px solid rgba(189,134,86,.2); display:flex; align-items:center; justify-content:space-between; }
-.card-header h4 { margin:0; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
-.copy-btn { padding:4px 8px; background:rgba(189,134,86,.2); border:1px solid rgba(189,134,86,.3); color:var(--bronze); border-radius:4px; font-size:11px; font-weight:600; }
-.copy-btn:hover { background:rgba(189,134,86,.3); }
-.card-content { padding:12px 14px; background:rgba(0,0,0,.2); overflow-y:auto; max-height:200px; }
-.card-content pre { margin:0; font-size:12px; line-height:1.4; font-family:'Courier New',monospace; white-space:pre-wrap; word-wrap:break-word; }
-
-.files-tab { flex:1; overflow-y:auto; padding:16px; }
-.file-item { border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:8px; }
-.file-btn { width:100%; padding:10px 12px; background:transparent; border:none; cursor:pointer; display:flex; align-items:center; gap:8px; color:var(--text); font-size:12px; }
-.file-btn:hover { background:rgba(189,134,86,.1); }
-.file-content { padding:12px; background:rgba(0,0,0,.3); border-top:1px solid var(--border); max-height:200px; overflow-y:auto; }
-.file-content pre { margin:0; font-size:11px; line-height:1.4; font-family:'Courier New',monospace; color:var(--text-muted); white-space:pre-wrap; word-wrap:break-word; }
-
-.modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,25,35,.8); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter:blur(4px); }
-.modal { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:32px; max-width:500px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.5); animation:slideUp .3s ease-out; }
-.modal h2 { margin:0 0 8px; font-size:20px; }
-.modal .desc { color:var(--text-muted); font-size:13px; margin:0 0 24px; }
-.field { margin-bottom:20px; }
-.field label { display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; }
-.field input { width:100%; padding:10px 12px; font-size:13px; }
-.field .hint { font-size:12px; color:var(--text-muted); margin:6px 0 0; }
-.modal-actions { display:flex; gap:12px; margin-top:28px; }
-.cancel-btn { flex:1; padding:10px 14px; background:var(--card-bg); border:1px solid var(--border); color:var(--text); border-radius:6px; font-size:13px; }
-.save-btn { flex:1; padding:10px 14px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); border-radius:6px; font-size:13px; font-weight:600; }
-
-.hidden { display:none!important; }
-@keyframes spin { to { transform:rotate(360deg); } }
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
-@keyframes glow { 0%,100% { box-shadow:0 0 0 0 rgba(189,134,86,.3); } 50% { box-shadow:0 0 0 8px rgba(189,134,86,0); } }
-@keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-@media (max-width:1400px) { .results { grid-template-columns:1fr; } }
-@media (max-width:900px) { .sidebar { width:240px; } .phase { padding:12px 8px; } .phase-label { font-size:10px; } .phase-icon { font-size:18px; } }
-</style>
-</head>
-<body>
-<div id="app">
-  <aside class="sidebar">
-    <div class="logo"><h2>Mortem AI</h2></div>
-    <button class="new-btn" id="newPipelineBtn">+ New Pipeline</button>
-    <div class="prospects-label">Recent Prospects</div>
-    <div class="prospects-list" id="prospectsList"><div class="empty-prospects">No prospects yet</div></div>
-    <button class="settings-btn" id="settingsBtn">Settings</button>
-  </aside>
-
-  <main class="main">
-    <div class="url-bar">
-      <input type="text" id="urlInput" placeholder="Enter funeral home URL...">
-      <button class="launch-btn" id="launchBtn">Launch Pipeline</button>
-    </div>
-    <div class="error-banner hidden" id="errorBanner"><span id="errorText"></span><button id="retryBtn">Retry</button></div>
-
-    <div class="phase-tracker">
-      <div class="phases" id="phasesContainer"></div>
-    </div>
-
-    <div class="results">
-      <div class="activity-feed">
-        <h3 class="activity-title">Activity Log</h3>
-        <div class="log-container" id="logContainer"><div class="empty-log">No activity yet. Launch a pipeline to get started.</div></div>
-      </div>
-      <div class="results-panel">
-        <div class="tabs-header">
-          <button class="tab active" data-tab="preview">Preview</button>
-          <button class="tab" data-tab="outreach">Outreach</button>
-          <button class="tab" data-tab="files">Files</button>
-        </div>
-        <div class="tab-content">
-          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">📊</div><p>Demo preview will appear here</p></div></div>
-          <div class="outreach-tab hidden" id="tab-outreach"><div class="placeholder"><div class="icon">📧</div><p>Outreach messages will appear here</p></div></div>
-          <div class="files-tab hidden" id="tab-files"><div class="placeholder"><div class="icon">📁</div><p>Generated files will appear here</p></div></div>
-        </div>
-      </div>
-    </div>
-  </main>
-</div>
-
-<div class="modal-overlay hidden" id="settingsModal">
-  <div class="modal">
-    <h2>Settings</h2>
-    <p class="desc">Configure your API credentials. These are stored locally in your browser.</p>
-    <div class="field"><label>Anthropic API Key</label><input type="password" id="apiKeyInput" placeholder="sk-ant-..."><p class="hint">Used for research, prompt generation, and outreach. Falls back to server env var if not set.</p></div>
-    <div class="field"><label>Netlify Token</label><input type="password" id="netlifyTokenInput" placeholder="nfl_..."><p class="hint">Used for deploying demo sites. Falls back to server env var if not set.</p></div>
-    <div class="modal-actions"><button class="cancel-btn" id="cancelSettings">Cancel</button><button class="save-btn" id="saveSettings">Save Settings</button></div>
-  </div>
-</div>
-
-<script>
-const PHASES = [
-  { id:1, label:'Research', icon:'🔍' },
-  { id:2, label:'Knowledge Doc', icon:'📄' },
-  { id:3, label:'Sarah Prompt', icon:'✍️' },
-  { id:4, label:'Demo Build', icon:'🔨' },
-  { id:5, label:'Deploy', icon:'🚀' },
-  { id:6, label:'Outreach', icon:'📧' },
-  { id:7, label:'Complete', icon:'✓' },
-];
-
-let prospects = JSON.parse(localStorage.getItem('prospects') || '[]');
-let apiKey = localStorage.getItem('apiKey') || '';
-let netlifyToken = localStorage.getItem('netlifyToken') || '';
-let isRunning = false;
-let phaseStatuses = {};
-let pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, outreach:null };
-let currentProspect = null;
-let failedPhaseId = null;
-
-function initPhases() {
-  phaseStatuses = {};
-  PHASES.forEach(p => phaseStatuses[p.id] = 'pending');
-  renderPhases();
-}
-
-function renderPhases() {
-  const c = document.getElementById('phasesContainer');
-  c.innerHTML = '';
-  PHASES.forEach((phase, idx) => {
-    const status = phaseStatuses[phase.id] || 'pending';
-    const div = document.createElement('div');
-    div.className = 'phase' + (status === 'running' ? ' running' : '') + (status === 'done' ? ' done' : '') + (status === 'error' ? ' error' : '');
-    let statusHtml = '';
-    if (status === 'running') statusHtml = '<div class="spinner"></div>';
-    else if (status === 'done') statusHtml = '<span class="checkmark">✓</span>';
-    else if (status === 'error') statusHtml = '<span class="error-mark">✕</span>';
-    div.innerHTML = '<div class="phase-icon">' + phase.icon + '</div><div class="phase-label">' + phase.label + '</div><div class="phase-status">' + statusHtml + '</div>';
-    c.appendChild(div);
-    if (idx < PHASES.length - 1) { const d = document.createElement('div'); d.className = 'phase-divider'; c.appendChild(d); }
-  });
-}
-
-function addLog(message, phaseId) {
-  const container = document.getElementById('logContainer');
-  if (container.querySelector('.empty-log')) container.innerHTML = '';
-  const ts = new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  const phase = phaseId ? PHASES.find(p => p.id === phaseId) : null;
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = '<span class="log-time">' + ts + '</span>' + (phase ? '<span class="log-phase">' + phase.label + '</span>' : '') + '<span class="log-message">' + message + '</span>';
-  container.appendChild(entry);
-  entry.scrollIntoView({ behavior:'smooth' });
-}
-
-function showError(msg) {
-  document.getElementById('errorBanner').classList.remove('hidden');
-  document.getElementById('errorText').textContent = msg;
-}
-function hideError() { document.getElementById('errorBanner').classList.add('hidden'); }
-
-function getHeaders() {
-  const h = { 'Content-Type':'application/json' };
-  if (apiKey) h['x-api-key-override'] = apiKey;
-  if (netlifyToken) h['x-netlify-token-override'] = netlifyToken;
-  return h;
-}
-
-async function apiCall(action, body) {
-  const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action, ...body }) });
-  if (!res.ok) { const err = await res.json().catch(() => ({ error:res.statusText })); throw new Error(err.error || res.statusText); }
-  return res.json();
-}
-
-async function launchPipeline() {
-  const url = document.getElementById('urlInput').value.trim();
-  if (!url) { showError('Please enter a valid URL'); return; }
-  try { new URL(url); } catch { showError('Please enter a valid URL'); return; }
-
-  hideError();
-  isRunning = true;
-  document.getElementById('launchBtn').disabled = true;
-  document.getElementById('launchBtn').textContent = 'Running...';
-  initPhases();
-  document.getElementById('logContainer').innerHTML = '';
-  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, outreach:null };
-  failedPhaseId = null;
-
-  const prospectName = new URL(url).hostname.replace('www.', '');
-  currentProspect = { id:Date.now(), name:prospectName, url, status:'in-progress', createdAt:new Date().toISOString(), data:{} };
-
-  try {
-    // Phase 1: Research
-    phaseStatuses[1] = 'running'; renderPhases();
-    addLog('Researching ' + url + '...', 1);
-    const research = await apiCall('research', { url });
-    pipelineData.research = research;
-    addLog('Research complete. Found ' + research.business_name, 1);
-    phaseStatuses[1] = 'done'; phaseStatuses[2] = 'done'; renderPhases();
-    addLog('Knowledge doc generated automatically', 2);
-
-    // Phase 3: Sarah Prompt
-    phaseStatuses[3] = 'running'; renderPhases();
-    addLog('Generating Sarah prompt...', 3);
-    const promptData = await apiCall('generate-prompt', { research });
-    pipelineData.prompt = promptData.prompt;
-    addLog('Sarah prompt generated', 3);
-    phaseStatuses[3] = 'done'; renderPhases();
-
-    // Phase 4: Demo Build
-    phaseStatuses[4] = 'running'; renderPhases();
-    addLog('Building demo site...', 4);
-    const demo = await apiCall('generate-demo', { research, sarahPrompt:pipelineData.prompt });
-    pipelineData.demo = demo;
-    addLog('Demo site built successfully', 4);
-    phaseStatuses[4] = 'done'; renderPhases();
-
-    // Phase 5: Deploy
-    phaseStatuses[5] = 'running'; renderPhases();
-    addLog('Deploying to Netlify...', 5);
-    const siteName = research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-sarah-demo';
-    const deployData = await apiCall('deploy', { html:demo.html, siteName });
-    pipelineData.deployUrl = deployData.url;
-    addLog('Deployed to ' + deployData.url, 5);
-    phaseStatuses[5] = 'done'; renderPhases();
-
-    // Phase 6: Outreach
-    phaseStatuses[6] = 'running'; renderPhases();
-    addLog('Generating outreach messages...', 6);
-    const outreach = await apiCall('outreach', { research, demoUrl:deployData.url });
-    pipelineData.outreach = outreach;
-    addLog('Outreach messages generated', 6);
-    phaseStatuses[6] = 'done'; renderPhases();
-
-    // Phase 7: Complete
-    phaseStatuses[7] = 'done'; renderPhases();
-    addLog('Pipeline complete!', 7);
-
-    currentProspect.status = 'deployed';
-    currentProspect.data = { ...pipelineData };
-    prospects.unshift(currentProspect);
-    localStorage.setItem('prospects', JSON.stringify(prospects));
-    renderProspects();
-    renderResults();
-
-  } catch (err) {
-    const runningPhase = Object.keys(phaseStatuses).find(k => phaseStatuses[k] === 'running');
-    if (runningPhase) { phaseStatuses[runningPhase] = 'error'; failedPhaseId = parseInt(runningPhase); renderPhases(); }
-    showError(err.message);
-    addLog('ERROR: ' + err.message, runningPhase ? parseInt(runningPhase) : null);
-  } finally {
-    isRunning = false;
-    document.getElementById('launchBtn').disabled = false;
-    document.getElementById('launchBtn').textContent = 'Launch Pipeline';
-  }
-}
-
-function renderProspects() {
-  const list = document.getElementById('prospectsList');
-  if (prospects.length === 0) { list.innerHTML = '<div class="empty-prospects">No prospects yet</div>'; return; }
-  list.innerHTML = '';
-  prospects.forEach((p, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'prospect-item' + (currentProspect && currentProspect.id === p.id ? ' active' : '');
-    const date = new Date(p.createdAt).toLocaleDateString('en-US', { month:'short', day:'numeric' });
-    btn.innerHTML = '<div class="prospect-dot ' + p.status + '"></div><div><div style="font-weight:500">' + p.name + '</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + date + '</div></div>';
-    btn.onclick = () => loadProspect(p);
-    list.appendChild(btn);
-  });
-}
-
-function loadProspect(p) {
-  currentProspect = p;
-  document.getElementById('urlInput').value = p.url;
-  pipelineData = p.data || {};
-  PHASES.forEach(phase => phaseStatuses[phase.id] = 'done');
-  renderPhases();
-  renderProspects();
-  renderResults();
-}
-
-function renderResults() {
-  // Preview tab
-  const previewTab = document.getElementById('tab-preview');
-  if (pipelineData.deployUrl) {
-    previewTab.innerHTML = '<div class="preview-link"><a href="' + pipelineData.deployUrl + '" target="_blank">View live: ' + pipelineData.deployUrl + '</a></div><iframe src="' + pipelineData.deployUrl + '" class="preview-iframe" title="Demo Preview"></iframe>';
-  }
-
-  // Outreach tab
-  const outreachTab = document.getElementById('tab-outreach');
-  if (pipelineData.outreach) {
-    let html = '';
-    const o = pipelineData.outreach;
-    if (o.email) html += makeOutreachCard('Email', '📧', typeof o.email === 'string' ? o.email : o.email.subject + '\n\n' + o.email.body);
-    if (o.linkedin) html += makeOutreachCard('LinkedIn', '💼', o.linkedin);
-    if (o.voicemail) html += makeOutreachCard('Voicemail Script', '📱', o.voicemail);
-    if (o.sms) html += makeOutreachCard('SMS', '💬', o.sms);
-    outreachTab.innerHTML = html;
-  }
-
-  // Files tab
-  const filesTab = document.getElementById('tab-files');
-  if (pipelineData.research || pipelineData.prompt || pipelineData.demo) {
-    let html = '';
-    if (pipelineData.research) html += makeFileItem('research.json', '📄', JSON.stringify(pipelineData.research, null, 2));
-    if (pipelineData.prompt) html += makeFileItem('sarah-prompt.txt', '✍️', pipelineData.prompt);
-    if (pipelineData.demo) html += makeFileItem('demo.html', '🌐', typeof pipelineData.demo === 'string' ? pipelineData.demo : JSON.stringify(pipelineData.demo, null, 2));
-    if (pipelineData.outreach) html += makeFileItem('outreach.json', '📧', JSON.stringify(pipelineData.outreach, null, 2));
-    filesTab.innerHTML = html;
-  }
-}
-
-function makeOutreachCard(title, icon, content) {
-  const escaped = content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return '<div class="outreach-card"><div class="card-header"><h4>' + icon + ' ' + title + '</h4><button class="copy-btn" onclick="copyText(this, `' + btoa(unescape(encodeURIComponent(content))) + '`)">Copy</button></div><div class="card-content"><pre>' + escaped + '</pre></div></div>';
-}
-
-function makeFileItem(name, icon, content) {
-  const id = 'file-' + name.replace(/[^a-z0-9]/gi, '-');
-  const escaped = (content || '').substring(0, 500).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return '<div class="file-item"><button class="file-btn" onclick="toggleFile(\'' + id + '\')">' + icon + ' <span style="flex:1;font-family:monospace">' + name + '</span> <span style="color:var(--text-muted);font-size:10px">▶</span></button><div class="file-content hidden" id="' + id + '"><pre>' + escaped + (content && content.length > 500 ? '...' : '') + '</pre></div></div>';
-}
-
-function toggleFile(id) { document.getElementById(id).classList.toggle('hidden'); }
-
-function copyText(btn, b64) {
-  const text = decodeURIComponent(escape(atob(b64)));
-  navigator.clipboard.writeText(text);
-  btn.textContent = '✓ Copied';
-  setTimeout(() => btn.textContent = 'Copy', 2000);
-}
-
-// Tab switching
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    document.querySelectorAll('.tab-content > div').forEach(d => d.classList.add('hidden'));
-    document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
-  });
-});
-
-// Event listeners
-document.getElementById('launchBtn').addEventListener('click', launchPipeline);
-document.getElementById('urlInput').addEventListener('keypress', e => { if (e.key === 'Enter' && !isRunning) launchPipeline(); });
-document.getElementById('newPipelineBtn').addEventListener('click', () => {
-  document.getElementById('urlInput').value = '';
-  currentProspect = null;
-  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, outreach:null };
-  initPhases();
-  document.getElementById('logContainer').innerHTML = '<div class="empty-log">No activity yet. Launch a pipeline to get started.</div>';
-  hideError();
-  document.getElementById('tab-preview').innerHTML = '<div class="placeholder"><div class="icon">📊</div><p>Demo preview will appear here</p></div>';
-  document.getElementById('tab-outreach').innerHTML = '<div class="placeholder"><div class="icon">📧</div><p>Outreach messages will appear here</p></div>';
-  document.getElementById('tab-files').innerHTML = '<div class="placeholder"><div class="icon">📁</div><p>Generated files will appear here</p></div>';
-  renderProspects();
-});
-
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('apiKeyInput').value = apiKey;
-  document.getElementById('netlifyTokenInput').value = netlifyToken;
-  document.getElementById('settingsModal').classList.remove('hidden');
-});
-document.getElementById('cancelSettings').addEventListener('click', () => document.getElementById('settingsModal').classList.add('hidden'));
-document.getElementById('settingsModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
-document.getElementById('saveSettings').addEventListener('click', () => {
-  apiKey = document.getElementById('apiKeyInput').value;
-  netlifyToken = document.getElementById('netlifyTokenInput').value;
-  localStorage.setItem('apiKey', apiKey);
-  localStorage.setItem('netlifyToken', netlifyToken);
+  localStorage.setItem('perplexityKey', perplexityKey);
   document.getElementById('settingsModal').classList.add('hidden');
 });
 document.getElementById('retryBtn').addEventListener('click', () => { if (failedPhaseId && !isRunning) launchPipeline(); });
