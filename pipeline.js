@@ -184,6 +184,126 @@ async function handleDeploy(req, res) {
   return res.status(200).json({ url: `https://${siteName}.netlify.app`, site_id: siteId, deploy_id: deployId });
 }
 
+async function handleMeetingPrep(req, res) {
+  const { research, demoUrl, contactName, contactRole } = req.body;
+  if (!research || !research.business_name) return res.status(400).json({ error: 'Research data with business_name is required' });
+
+  const client = getClient(req.headers['x-api-key-override']);
+  const contact = contactName || research.owner_name || 'the owner';
+  const role = contactRole || 'Owner/Director';
+
+  const prompt = `You are an expert sales strategist and HTML designer at Mortem AI. Create a comprehensive, beautifully designed meeting prep document as a single HTML file.
+
+This document is for Tom at Mortem AI to prepare for a sales meeting with a funeral home prospect.
+
+FUNERAL HOME DATA:
+- Business: ${research.business_name}
+- Contact: ${contact} (${role})
+- Phone: ${research.phone || 'Not found'}
+- Address: ${research.address || ''}, ${research.city || ''}, ${research.state || ''}
+- Services: ${(research.services || []).join(', ')}
+- Locations: ${(research.locations || []).map(l => l.name + ' - ' + (l.address || l.area || '')).join('; ')}
+- Service Area: ${research.service_area || 'local area'}
+- Unique Points: ${research.unique_selling_points || 'N/A'}
+- Website: ${research.website_url || ''}
+- Tagline: ${research.tagline || ''}
+${demoUrl ? '- Live Demo: ' + demoUrl : ''}
+
+DESIGN REQUIREMENTS:
+- Single complete HTML file with all CSS inline in a <style> block
+- Fonts: Cormorant Garamond for headings (serif), DM Sans for body (sans-serif) via Google Fonts
+- Use a CSS class prefix based on the business initials (e.g. .mm- for Mission Memorials) to namespace all classes
+- All colors must use !important to ensure compatibility
+- Color palette: derive a professional palette from the funeral home brand. Use a dark navy primary (#0f1d2e or similar), a warm accent gold/bronze (#c8a96e or similar), cream backgrounds (#faf8f5 or similar)
+- No CSS variables - use direct color values with !important
+- Clean, elegant, print-friendly layout
+- Max width container around 900px, centered
+- Subtle borders and dividers between sections
+
+DOCUMENT STRUCTURE (follow this exactly):
+
+1. BRANDED HEADER
+   - Mortem AI logo on the left: https://storage.googleapis.com/msgsndr/KwHyQsuzPI6o5CiZfPfN/media/689ef6fa5dc21c2e15d6807f.png
+   - Document title: "Meeting Preparation: ${research.business_name}"
+   - Date and subtitle
+   - If a demo URL exists, include a prominent link to it
+
+2. CONTACT PROFILE
+   - Name: ${contact}
+   - Role: ${role}
+   - Research their likely background for a funeral home professional in ${research.city || ''}, ${research.state || ''}
+   - Include talking points specific to this person
+
+3. COMPANY OVERVIEW
+   - Business history and background (infer from available data)
+   - All locations with addresses
+   - Services offered
+   - Service area coverage
+   - Key differentiators
+
+4. CURRENT DIGITAL STATE AUDIT
+   - Analyze what you can infer about their current website
+   - Note strengths and weaknesses
+   - Current online presence assessment
+   - Areas where AI chatbot would add value
+
+5. GAP ANALYSIS
+   - What families searching for funeral services in their area need
+   - Where the current digital experience falls short
+   - How Sarah AI fills these gaps (24/7 availability, compassionate responses, appointment booking, FAQ handling)
+
+6. COMPETITIVE CONTEXT
+   - Other funeral homes in ${research.city || ''}, ${research.state || ''} area
+   - How competitors are using technology
+   - Opportunity to be an early adopter of AI
+
+7. ROI MATH
+   - Average funeral service value ($7,000-$12,000)
+   - Estimated missed after-hours inquiries
+   - Conversion rate improvements with 24/7 AI response
+   - Monthly ROI projection showing clear value
+   - Use a clean table format
+
+8. TALK TRACKS
+   - Opening lines personalized to ${contact}
+   - Key questions to ask
+   - Objection handling (price, "we are traditional", "families want humans", "we already have a website")
+   - Closing approach
+   - Each talk track should be a distinct subsection with a header
+
+9. PRE-MEETING ACTION ITEMS
+   - Checklist format with checkbox styling
+   - Items like: review their Google reviews, check their social media, test their current website response time, prepare demo walkthrough
+
+10. FOOTER
+    - "Prepared by Mortem AI" with logo
+    - Confidential notice
+    - Contact: Tom Magee, Mortem AI
+
+CRITICAL RULES:
+- Never use em dashes (use commas, periods, or "to" instead)
+- Write naturally, not like marketing copy
+- Be specific and data-driven where possible
+- Make it feel like a senior sales strategist wrote this, not a generic AI
+- The document should be comprehensive, at least 800 lines of HTML
+- Every section should have real, substantive content
+
+Return ONLY the complete HTML. Start with <!DOCTYPE html> and end with </html>. No markdown, no code blocks, no explanation.`;
+
+  const message = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 8000,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  let html = message.content[0].type === 'text' ? message.content[0].text : '';
+  if (html.includes('```html')) html = html.replace(/```html\n?/, '').replace(/\n?```/, '');
+  else if (html.includes('```')) html = html.replace(/```\n?/, '').replace(/\n?```/, '');
+  html = html.trim();
+  if (!html.startsWith('<!DOCTYPE')) throw new Error('Generated meeting prep HTML does not start with <!DOCTYPE');
+  return res.status(200).json({ html });
+}
+
 async function handleOutreach(req, res) {
   const { research, demoUrl } = req.body;
   if (!research || !demoUrl) return res.status(400).json({ error: 'Research data and demoUrl are required' });
@@ -237,6 +357,7 @@ export default async function handler(req, res) {
       case 'generate-prompt': return await handleGeneratePrompt(req, res);
       case 'generate-demo': return await handleGenerateDemo(req, res);
       case 'deploy': return await handleDeploy(req, res);
+      case 'meeting-prep': return await handleMeetingPrep(req, res);
       case 'outreach': return await handleOutreach(req, res);
       default: return res.status(400).json({ error: `Unknown action: ${action}` });
     }
@@ -246,4 +367,4 @@ export default async function handler(req, res) {
   }
 }
 
-export const config = { api: { bodyParser: { sizeLimit: '4mb' } } };
+export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
