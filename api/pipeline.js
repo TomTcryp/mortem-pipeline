@@ -344,18 +344,23 @@ CRITICAL RULES:
 
 Return ONLY the complete HTML. Start with <!DOCTYPE html> and end with </html>. No markdown, no code blocks, no explanation.`;
 
-  const message = await client.messages.create({
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const stream = await client.messages.stream({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 16000,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  let html = message.content[0].type === 'text' ? message.content[0].text : '';
-  if (html.includes('```html')) html = html.replace(/```html\n?/, '').replace(/\n?```/, '');
-  else if (html.includes('```')) html = html.replace(/```\n?/, '').replace(/\n?```/, '');
-  html = html.trim();
-  if (!html.startsWith('<!DOCTYPE')) throw new Error('Generated meeting prep HTML does not start with <!DOCTYPE');
-  return res.status(200).json({ html });
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      res.write(`data: ${JSON.stringify({ type: 'chunk', text: event.delta.text })}\n\n`);
+    }
+  }
+  res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+  res.end();
 }
 
 async function handleFactCheck(req, res) {
@@ -470,18 +475,23 @@ INSTRUCTIONS:
 
 Return ONLY the complete HTML. Start with <!DOCTYPE html> and end with </html>.`;
 
-  const message = await client.messages.create({
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const stream = await client.messages.stream({
     model: 'claude-sonnet-4-20250514',
     max_tokens: 16000,
     messages: [{ role: 'user', content: prompt }],
   });
 
-  let html = message.content[0].type === 'text' ? message.content[0].text : '';
-  if (html.includes('```html')) html = html.replace(/```html\n?/, '').replace(/\n?```/, '');
-  else if (html.includes('```')) html = html.replace(/```\n?/, '').replace(/\n?```/, '');
-  html = html.trim();
-  if (!html.startsWith('<!DOCTYPE')) throw new Error('Regenerated HTML does not start with <!DOCTYPE');
-  return res.status(200).json({ html });
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      res.write(`data: ${JSON.stringify({ type: 'chunk', text: event.delta.text })}\n\n`);
+    }
+  }
+  res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+  res.end();
 }
 
 async function handleOutreach(req, res) {
