@@ -154,12 +154,80 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
 @keyframes glow { 0%,100% { box-shadow:0 0 0 0 rgba(189,134,86,.3); } 50% { box-shadow:0 0 0 8px rgba(189,134,86,0); } }
 @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 @media (max-width:1400px) { .results { grid-template-columns:1fr; } }
-@media (max-width:900px) { .sidebar { width:240px; } .phase { padding:12px 8px; } .phase-label { font-size:10px; } .phase-icon { font-size:18px; } }
+
+/* Hamburger menu button */
+.hamburger { display:none; position:fixed; top:12px; left:12px; z-index:1100; width:44px; height:44px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; flex-direction:column; align-items:center; justify-content:center; gap:5px; cursor:pointer; }
+.hamburger span { display:block; width:22px; height:2px; background:var(--bronze); border-radius:2px; transition:all .3s ease; }
+.hamburger.active span:nth-child(1) { transform:rotate(45deg) translate(5px,5px); }
+.hamburger.active span:nth-child(2) { opacity:0; }
+.hamburger.active span:nth-child(3) { transform:rotate(-45deg) translate(5px,-5px); }
+.sidebar-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,25,35,.7); z-index:1000; backdrop-filter:blur(2px); }
+.sidebar-overlay.visible { display:block; }
+
+/* Activity log collapsible */
+.activity-toggle { display:none; padding:8px 12px; background:rgba(189,134,86,.1); border:1px solid rgba(189,134,86,.2); border-radius:6px; color:var(--bronze); font-size:12px; font-weight:600; margin-top:8px; width:100%; text-align:center; cursor:pointer; }
+
+/* Mobile: 900px and below */
+@media (max-width:900px) {
+  .hamburger { display:flex; }
+  .sidebar { position:fixed; top:0; left:-300px; width:280px; z-index:1050; height:100vh; transition:left .3s ease; box-shadow:none; }
+  .sidebar.open { left:0; box-shadow:4px 0 24px rgba(0,0,0,.5); }
+  .main { margin-left:0; }
+  .url-bar { flex-wrap:wrap; padding:16px 16px 16px 60px; gap:8px; }
+  .url-bar input { flex:unset!important; width:100%; }
+  .launch-btn { width:100%; text-align:center; }
+  .phase-tracker { padding:12px 16px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .phases { min-width:600px; gap:4px; }
+  .phase { padding:10px 6px; min-width:60px; }
+  .phase-icon { font-size:18px; }
+  .phase-label { font-size:9px; }
+  .phase-divider { flex:0 0 8px; }
+  .results { padding:12px 16px; gap:12px; }
+  .activity-feed { min-height:unset; }
+  .activity-feed .log-container { max-height:200px; overflow-y:auto; }
+  .activity-feed .log-container.expanded { max-height:none; }
+  .activity-toggle { display:block; }
+  .results-panel { min-height:300px; }
+  .tabs-header { gap:2px; padding:6px 8px; }
+  .tab { padding:12px 8px; font-size:12px; font-weight:600; min-height:44px; display:flex; align-items:center; justify-content:center; }
+  .tab.active { box-shadow:0 2px 8px rgba(189,134,86,.3); }
+  .log-entry { padding:10px 12px; gap:8px; }
+  .log-time { font-size:10px; }
+  .log-phase { font-size:9px; padding:2px 6px; }
+  .log-message { font-size:12px; }
+  .fact-check-bar { flex-wrap:wrap; padding:10px 12px; gap:8px; }
+  .fact-check-btn { font-size:12px; padding:10px 14px; min-height:44px; }
+  .auto-regen-toggle { font-size:11px; }
+  .preview-iframe { min-height:350px; }
+  .modal { padding:20px; max-width:95%; }
+  .modal h2 { font-size:18px; }
+  .error-banner { padding:12px 16px; font-size:12px; flex-wrap:wrap; gap:8px; }
+}
+
+/* Small phones: 480px and below */
+@media (max-width:480px) {
+  .url-bar { padding:12px 12px 12px 56px; }
+  .phase-tracker { padding:10px 12px; }
+  .phases { min-width:520px; }
+  .phase { padding:8px 4px; min-width:50px; }
+  .phase-icon { font-size:16px; }
+  .phase-label { font-size:8px; }
+  .results { padding:10px 12px; gap:10px; }
+  .tab { font-size:11px; padding:10px 4px; }
+  .activity-title { padding:12px 14px; font-size:13px; }
+  .preview-iframe { min-height:280px; }
+  .outreach-tab { padding:10px; }
+  .card-content pre { font-size:11px; }
+  .modal { padding:16px; }
+  .field input { padding:12px 10px; font-size:14px; }
+}
 </style>
 </head>
 <body>
 <div id="app">
-  <aside class="sidebar">
+  <button class="hamburger" id="hamburgerBtn"><span></span><span></span><span></span></button>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <aside class="sidebar" id="sidebar">
     <div class="logo"><h2>Mortem AI</h2></div>
     <button class="new-btn" id="newPipelineBtn">+ New Pipeline</button>
     <div class="prospects-label">Recent Prospects</div>
@@ -184,6 +252,7 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
       <div class="activity-feed">
         <h3 class="activity-title">Activity Log</h3>
         <div class="log-container" id="logContainer"><div class="empty-log">No activity yet. Launch a pipeline to get started.</div></div>
+        <button class="activity-toggle" id="activityToggle" onclick="toggleActivityLog()">Show all entries</button>
       </div>
       <div class="results-panel">
         <div class="tabs-header">
@@ -193,7 +262,7 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
           <button class="tab" data-tab="files">Files</button>
         </div>
         <div class="tab-content">
-          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">📊</div><p>Demo preview will appear here</p></div></div>
+          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">💊</div><p>Demo preview will appear here</p></div></div>
           <div class="preview-tab hidden" id="tab-meeting-prep">
             <div class="fact-check-bar hidden" id="factCheckBar">
               <button class="fact-check-btn" id="factCheckBtn" onclick="runFactCheck()">Fact-Check with Perplexity</button>
@@ -488,8 +557,7 @@ async function runFactCheck() {
     showError('Fact-check failed: ' + err.message);
     status.textContent = 'Failed';
   } finally {
-
-      btn.disabled = false;
+    btn.disabled = false;
     btn.textContent = 'Fact-Check with Perplexity';
     btn.classList.remove('checking');
   }
@@ -714,6 +782,34 @@ document.getElementById('saveSettings').addEventListener('click', () => {
   document.getElementById('settingsModal').classList.add('hidden');
 });
 document.getElementById('retryBtn').addEventListener('click', () => { if (failedPhaseId && !isRunning) launchPipeline(); });
+
+// Mobile sidebar toggle
+const hamburger = document.getElementById('hamburgerBtn');
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+function toggleSidebar() {
+  sidebar.classList.toggle('open');
+  hamburger.classList.toggle('active');
+  sidebarOverlay.classList.toggle('visible');
+}
+hamburger.addEventListener('click', toggleSidebar);
+sidebarOverlay.addEventListener('click', toggleSidebar);
+
+// Close sidebar when selecting a prospect on mobile
+const origLoadProspect = loadProspect;
+loadProspect = function(p) {
+  origLoadProspect(p);
+  if (window.innerWidth <= 900 && sidebar.classList.contains('open')) toggleSidebar();
+};
+
+// Activity log toggle for mobile
+function toggleActivityLog() {
+  const container = document.getElementById('logContainer');
+  const btn = document.getElementById('activityToggle');
+  container.classList.toggle('expanded');
+  btn.textContent = container.classList.contains('expanded') ? 'Show less' : 'Show all entries';
+}
 
 // Init
 initPhases();
