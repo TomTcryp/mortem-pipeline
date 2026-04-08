@@ -7,43 +7,374 @@ function getClient(overrideKey) {
   return new Anthropic({ apiKey });
 }
 
+// ââ Deep Research Utilities ââ
+
+async function fetchWebPage(url, timeout = 8000) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      redirect: 'follow',
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) return null;
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/xhtml')) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+function extractTextFromHtml(html, maxLength = 4000) {
+  if (!html) return '';
+  let text = html.replace(/<script[\s\S]*?<\/script>/gi, '');
+  text = text.replace(/<style[\s\S]*?<\/style>/gi, '');
+  text = text.replace(/<nav[\s\S]*?<\/nav>/gi, '');
+  const titleMatch = text.match(/<title>(.*?)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].trim() : '';
+  const metaDesc = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["']/i);
+  const description = metaDesc ? metaDesc[1].trim() : '';
+  text = text.replace(/<[^>]*>/g, ' ');
+  text = text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  text = text.replace(/\s+/g, ' ').trim();
+  if (text.length > maxLength) text = text.substring(0, maxLength) + '...';
+  let result = '';
+  if (title) result += `[Page Title: ${title}]\n`;
+  if (description) result += `[Meta Description: ${description}]\n`;
+  result += text;
+  return result;
+}
+
+function extractTechStack(html) {
+  if (!html) return [];
+  const signals = [];
+  const checks = [
+    [/wp-content|wordpress/i, 'WordPress'],
+    [/squarespace/i, 'Squarespace'],
+    [/wix\.com/i, 'Wix'],
+    [/weebly/i, 'Weebly'],
+    [/frazer|FrazerConsultants/i, 'Frazer Consultants (funeral industry CMS)'],
+    [/funeraltech|FuneralTech/i, 'FuneralTech'],
+    [/tributetech|TributeTech/i, 'TributeTech'],
+    [/frontrunner|FrontRunner/i, 'FrontRunner Professional (funeral industry CMS)'],
+    [/cfsweb|cfs\.com/i, 'CFS (Consolidated Funeral Services)'],
+    [/batesville/i, 'Batesville technology'],
+    [/tributeprint/i, 'TributePrint'],
+    [/srs-computing|SRS Computing/i, 'SRS Computing (funeral industry)'],
+    [/funeralOne|funeral[_-]?one/i, 'funeralOne (funeral industry CMS)'],
+    [/jquery/i, 'jQuery'],
+    [/react/i, 'React'],
+    [/bootstrap/i, 'Bootstrap CSS'],
+    [/tailwind/i, 'Tailwind CSS'],
+    [/livechat|tawk\.to|intercom|drift|chatbot|chat-widget|zendesk/i, 'Live chat widget detected'],
+    [/google-analytics|gtag|googletagmanager|GA4/i, 'Google Analytics/Tag Manager'],
+    [/facebook\.net|fbq\(|fb-pixel/i, 'Facebook Pixel'],
+    [/schema\.org/i, 'Schema.org structured data'],
+    [/og:title|og:description/i, 'OpenGraph meta tags'],
+    [/recaptcha/i, 'reCAPTCHA (form protection)'],
+    [/mailchimp|constant.?contact|hubspot/i, 'Email marketing integration'],
+    [/calendly|acuity|bookings/i, 'Online scheduling/booking'],
+  ];
+  checks.forEach(([regex, label]) => { if (regex.test(html)) signals.push(label); });
+  if (/name=["']viewport["']/i.test(html)) signals.push('Mobile viewport configured');
+  else signals.push('NO mobile viewport tag (not mobile-responsive)');
+  if (/<link[^>]*rel=["']canonical["']/i.test(html)) signals.push('Canonical URL set');
+  if (/https?:\/\//i.test(html) && /ssl|https/i.test(html)) signals.push('HTTPS enabled');
+  return signals;
+}
+
+async function perplexitySearch(apiKey, query, maxTokens = 1500) {
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [
+          { role: 'system', content: 'You are a thorough research assistant. Provide detailed, factual information based on real web sources. Include specific names, dates, addresses, phone numbers, ratings, and URLs where available. If you cannot find specific information, say so clearly rather than guessing.' },
+          { role: 'user', content: query }
+        ],
+        max_tokens: maxTokens,
+        temperature: 0.1,
+      }),
+    });
+    if (!response.ok) return { content: null, error: `HTTP ${response.status}` };
+    const data = await response.json();
+    return { content: data.choices?.[0]?.message?.content || null };
+  } catch (err) {
+    return { content: null, error: err.message };
+  }
+}
+
+// ââ Main Research Handler (SSE streaming with progress) ââ
+
 async function handleResearch(req, res) {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
 
+  // Set up SSE for progress reporting
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  const send = (type, payload) => {
+    res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+  };
+
+  const perplexityKey = req.headers['x-perplexity-key-override'] || process.env.PERPLEXITY_API_KEY;
   const client = getClient(req.headers['x-api-key-override']);
-  const prompt = `You are an expert funeral home researcher. Analyze the provided funeral home website and extract key information.
+  const baseUrl = url.replace(/\/+$/, '');
 
-Website URL: ${url}
+  try {
+    // ââ STEP 1: Crawl the website page by page ââ
+    send('progress', { phase: 'crawl', message: 'Crawling website pages...' });
 
-Visit and research this funeral home website. Extract and return ONLY valid JSON (no markdown, no extra text) with this exact structure:
+    const pagePaths = [
+      '/',
+      '/about', '/about-us', '/our-story', '/history', '/who-we-are',
+      '/services', '/our-services', '/funeral-services', '/what-we-offer',
+      '/cremation', '/cremation-services',
+      '/pre-planning', '/pre-plan', '/plan-ahead', '/advance-planning',
+      '/contact', '/contact-us',
+      '/staff', '/our-team', '/our-staff', '/meet-our-team', '/meet-the-team', '/our-people',
+      '/locations', '/our-locations', '/facilities',
+      '/obituaries', '/tributes', '/recent-obituaries',
+      '/resources', '/grief-support', '/faq',
+      '/testimonials', '/reviews',
+    ];
+
+    const pageResults = await Promise.allSettled(
+      pagePaths.map(path => fetchWebPage(`${baseUrl}${path}`, 6000))
+    );
+
+    const websiteContent = {};
+    let homepageHtml = null;
+    pagePaths.forEach((path, i) => {
+      const result = pageResults[i];
+      if (result.status === 'fulfilled' && result.value) {
+        websiteContent[path] = extractTextFromHtml(result.value);
+        if (path === '/') homepageHtml = result.value;
+      }
+    });
+
+    const foundPages = Object.keys(websiteContent);
+    send('progress', { phase: 'crawl', message: `Found ${foundPages.length} accessible pages: ${foundPages.join(', ')}` });
+
+    // Extract tech stack from homepage source
+    const techStack = homepageHtml ? extractTechStack(homepageHtml) : [];
+    send('progress', { phase: 'crawl', message: `Tech stack: ${techStack.length > 0 ? techStack.join(', ') : 'Could not determine'}` });
+
+    // Extract business name hint from homepage title
+    let businessNameHint = '';
+    if (homepageHtml) {
+      const titleMatch = homepageHtml.match(/<title>(.*?)<\/title>/i);
+      if (titleMatch) businessNameHint = titleMatch[1].replace(/\s*[\||\-|â]\s*Home.*$/i, '').replace(/\s*[\||\-|â]\s*Welcome.*$/i, '').trim();
+    }
+    if (!businessNameHint) {
+      try {
+        const hostname = new URL(url).hostname.replace('www.', '');
+        businessNameHint = hostname.split('.')[0].replace(/-/g, ' ');
+      } catch {}
+    }
+
+    // ââ STEP 2: Run Perplexity web searches in parallel ââ
+    send('progress', { phase: 'search', message: `Searching Google for "${businessNameHint}" -- business info, owners, reviews, competitors...` });
+
+    let searchResults = { business: null, reviews: null, people: null, competitors: null, news: null };
+
+    if (perplexityKey) {
+      const searches = await Promise.allSettled([
+        perplexitySearch(perplexityKey,
+          `Tell me everything about "${businessNameHint}" funeral home. Their website is ${url}. Specifically: Who owns this funeral home? Who are the funeral directors? When was it founded? Is it family-owned or corporate? How many locations do they have? What is their full address and phone number? What services do they offer? What is their history? Are they affiliated with any larger organizations? Provide specific names, dates, and cite your sources.`,
+          2500
+        ),
+        perplexitySearch(perplexityKey,
+          `Find reviews and reputation information for "${businessNameHint}" funeral home (website: ${url}). Check: Google Reviews (rating and number of reviews), Yelp reviews, BBB rating and any complaints, Facebook reviews, and any other review platforms. What do customers commonly praise? What complaints exist? Quote specific review themes. Provide numbers and ratings.`,
+          2000
+        ),
+        perplexitySearch(perplexityKey,
+          `Search for the key people who work at "${businessNameHint}" funeral home (${url}). Find: owners, funeral directors, embalmers, and management. For each person, search LinkedIn profiles, obituaries they have signed or directed, news articles mentioning them, community involvement, professional awards, and memberships in organizations like NFDA or state funeral directors associations. How long have they been in the funeral industry? What is their educational background? Provide specific names and details.`,
+          2000
+        ),
+        perplexitySearch(perplexityKey,
+          `What are the main competitor funeral homes near "${businessNameHint}" (${url})? List the top 5 competitors with: business name, website URL, Google review rating and count, services offered, whether they have online booking or chat features, and how they compare. Also describe the local funeral services market: population demographics, death rate trends, number of funeral homes in the area, and any market trends.`,
+          2000
+        ),
+        perplexitySearch(perplexityKey,
+          `Search for recent news, press coverage, community involvement, events, or social media activity related to "${businessNameHint}" funeral home (${url}). Check: local newspaper mentions, community events they sponsor or participate in, social media presence (Facebook, Instagram, LinkedIn pages), any awards or recognitions, and any recent changes to the business. Also check if they have pre-planning seminars, grief support groups, or other community programs.`,
+          1500
+        ),
+      ]);
+
+      searchResults.business = searches[0]?.status === 'fulfilled' ? searches[0].value.content : null;
+      searchResults.reviews = searches[1]?.status === 'fulfilled' ? searches[1].value.content : null;
+      searchResults.people = searches[2]?.status === 'fulfilled' ? searches[2].value.content : null;
+      searchResults.competitors = searches[3]?.status === 'fulfilled' ? searches[3].value.content : null;
+      searchResults.news = searches[4]?.status === 'fulfilled' ? searches[4].value.content : null;
+
+      const foundCount = Object.values(searchResults).filter(v => v).length;
+      send('progress', { phase: 'search', message: `Web search complete. Got results from ${foundCount}/5 searches.` });
+    } else {
+      send('progress', { phase: 'search', message: 'No Perplexity API key available. Skipping web searches. Results will be limited to website crawl only.' });
+    }
+
+    // ââ STEP 3: Compile everything with Claude ââ
+    send('progress', { phase: 'compile', message: 'Analyzing all research data and compiling profile...' });
+
+    const websiteContentStr = Object.entries(websiteContent)
+      .map(([path, text]) => `=== PAGE: ${baseUrl}${path} ===\n${text}`)
+      .join('\n\n');
+
+    const synthesisPrompt = `You are an expert funeral home researcher compiling a detailed prospect profile. You have been given REAL data from actual website crawling and live web searches. Your job is to compile this into a comprehensive, accurate research profile.
+
+CRITICAL RULES:
+- ONLY include information that is ACTUALLY found in the sources below.
+- Do NOT fabricate, guess, or infer information that is not supported by the data.
+- If something was not found, use "Not found" or omit it entirely.
+- Every claim should trace back to something in the provided sources.
+- Distinguish between confirmed facts and reasonable inferences (mark inferences as such).
+
+=== WEBSITE CONTENT (crawled from ${url}) ===
+Pages found: ${foundPages.join(', ')}
+
+${websiteContentStr || 'WARNING: Could not access any pages on this website.'}
+
+=== TECH STACK (detected from HTML source code) ===
+${techStack.length > 0 ? techStack.join('\n') : 'Could not inspect source code'}
+
+=== WEB SEARCH: BUSINESS INFO & OWNERSHIP ===
+${searchResults.business || 'No search results available (Perplexity API key may not be configured)'}
+
+=== WEB SEARCH: REVIEWS & REPUTATION ===
+${searchResults.reviews || 'No search results available'}
+
+=== WEB SEARCH: KEY PEOPLE & DIRECTORS ===
+${searchResults.people || 'No search results available'}
+
+=== WEB SEARCH: COMPETITORS & LOCAL MARKET ===
+${searchResults.competitors || 'No search results available'}
+
+=== WEB SEARCH: NEWS & COMMUNITY INVOLVEMENT ===
+${searchResults.news || 'No search results available'}
+
+Based ONLY on the above real data, compile and return a JSON object. Return ONLY valid JSON (no markdown, no code blocks, no explanation before or after). Use this structure:
+
 {
-  "business_name": "funeral home name",
-  "owner_name": "owner name if found, otherwise just 'the team'",
-  "phone": "phone number",
-  "address": "street address",
+  "business_name": "official name as found on website or search results",
+  "owner_name": "actual owner name if found, or 'Not found'",
+  "owners_and_directors": [
+    {"name": "full name", "role": "their title/role", "background": "what was found about them", "source": "where this was found (website page, Google, LinkedIn, etc.)"}
+  ],
+  "phone": "phone number from website or listings",
+  "email": "email if found on contact page or listings",
+  "address": "full street address",
   "city": "city",
   "state": "state abbreviation",
-  "services": ["service1", "service2", "service3"],
-  "locations": [{"name": "location name", "address": "address", "area": "service area"}],
-  "unique_selling_points": "key differentiators or specialties",
-  "service_area": "geographic service area",
-  "tagline": "a brief tagline or motto",
-  "website_url": "${url}"
+  "founded": "year or decade if found, otherwise 'Not found'",
+  "ownership_type": "family-owned, corporate-owned, independent, etc. based on what was found",
+  "generation": "first/second/third generation if mentioned, otherwise 'Not found'",
+  "services": ["list", "of", "actual", "services", "found", "on", "their", "website"],
+  "services_detail": {
+    "Service Name": "detailed description as found on their services page"
+  },
+  "locations": [
+    {"name": "location name", "address": "full address", "phone": "phone if different", "area": "service area mentioned"}
+  ],
+  "unique_selling_points": "actual differentiators found on their site, in reviews, or search results",
+  "service_area": "geographic area they serve as stated on their website",
+  "tagline": "actual tagline or motto from their website, or 'Not found'",
+  "website_url": "${url}",
+  "website_pages_found": ${JSON.stringify(foundPages)},
+  "tech_stack": ${JSON.stringify(techStack)},
+  "has_online_booking": false,
+  "has_chat_widget": false,
+  "has_mobile_responsive": ${techStack.some(t => t.includes('Mobile viewport')) ? 'true' : 'false'},
+  "has_structured_data": ${techStack.some(t => t.includes('Schema.org')) ? 'true' : 'false'},
+  "has_analytics": ${techStack.some(t => t.includes('Google Analytics')) ? 'true' : 'false'},
+  "google_reviews": {
+    "rating": "X.X or 'Not found'",
+    "count": "number or 'Not found'",
+    "themes": "common themes from reviews"
+  },
+  "yelp_reviews": {
+    "rating": "X.X or 'Not found'",
+    "count": "number or 'Not found'"
+  },
+  "bbb_rating": "rating if found or 'Not found'",
+  "competitors": [
+    {"name": "competitor name", "url": "website", "google_rating": "rating", "review_count": "count", "key_differences": "how they compare", "has_chat": false, "has_booking": false}
+  ],
+  "community_involvement": ["actual activities, sponsorships, or memberships found"],
+  "recent_news": ["actual news items or press mentions found"],
+  "social_media": {
+    "facebook": "URL or 'Not found'",
+    "instagram": "URL or 'Not found'",
+    "linkedin": "URL or 'Not found'"
+  },
+  "staff_count_estimate": "based on staff page content or 'Not found'",
+  "obituary_volume": "any indication of volume from obituaries page or 'Not found'",
+  "market_demographics": "local area demographics from search results or 'Not found'",
+  "digital_presence_assessment": {
+    "score": "1-10",
+    "strengths": ["what they do well digitally"],
+    "weaknesses": ["what is missing or poor"],
+    "opportunities": ["where Sarah AI would add value"]
+  },
+  "research_sources": ["list every source that provided information: URLs, search queries, page paths"],
+  "research_gaps": ["list what could NOT be found or verified"],
+  "confidence_level": "high/medium/low based on how much real data was found"
 }
 
-Extract real information from the website. If you cannot access the website, make reasonable inferences based on the URL and best practices for funeral homes in that region.`;
+Set has_online_booking and has_chat_widget to true/false based on what you actually found on their website pages or in the tech stack signals. Be thorough. Return ONLY the JSON.`;
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
-    messages: [{ role: 'user', content: prompt }],
-  });
+    const message = await client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: synthesisPrompt }],
+    });
 
-  const content = message.content[0].type === 'text' ? message.content[0].text : '';
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Could not parse JSON response from Claude');
-  return res.status(200).json(JSON.parse(jsonMatch[0]));
+    const content = message.content[0].type === 'text' ? message.content[0].text : '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      send('error', { message: 'Could not parse research results from Claude' });
+      res.end();
+      return;
+    }
+
+    let researchData;
+    try {
+      researchData = JSON.parse(jsonMatch[0]);
+    } catch (parseErr) {
+      send('error', { message: 'JSON parse error: ' + parseErr.message });
+      res.end();
+      return;
+    }
+
+    // Attach raw search data for downstream use
+    researchData._raw_searches = {
+      business: searchResults.business ? searchResults.business.substring(0, 2000) : null,
+      reviews: searchResults.reviews ? searchResults.reviews.substring(0, 2000) : null,
+      people: searchResults.people ? searchResults.people.substring(0, 2000) : null,
+      competitors: searchResults.competitors ? searchResults.competitors.substring(0, 2000) : null,
+      news: searchResults.news ? searchResults.news.substring(0, 2000) : null,
+    };
+
+    send('progress', { phase: 'complete', message: `Research complete. Found ${researchData.owners_and_directors?.length || 0} people, ${researchData.competitors?.length || 0} competitors, ${foundPages.length} website pages.` });
+    send('result', { data: researchData });
+    send('done', {});
+    res.end();
+
+  } catch (err) {
+    send('error', { message: err.message || 'Research failed' });
+    res.end();
+  }
 }
 
 async function handleGeneratePrompt(req, res) {
