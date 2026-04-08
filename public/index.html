@@ -262,7 +262,7 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
           <button class="tab" data-tab="files">Files</button>
         </div>
         <div class="tab-content">
-          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">💊</div><p>Demo preview will appear here</p></div></div>
+          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">ð</div><p>Demo preview will appear here</p></div></div>
           <div class="preview-tab hidden" id="tab-meeting-prep">
             <div class="fact-check-bar hidden" id="factCheckBar">
               <button class="fact-check-btn" id="factCheckBtn" onclick="runFactCheck()">Fact-Check with Perplexity</button>
@@ -274,10 +274,10 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
             </div>
             <div class="fact-check-results hidden" id="factCheckResults"></div>
             <div class="regen-status hidden" id="regenStatus"><div class="spinner" style="width:12px;height:12px;border-width:2px;"></div> Regenerating with fact-checked data...</div>
-            <div id="meetingPrepContent"><div class="placeholder"><div class="icon">📋</div><p>Meeting prep document will appear here</p></div></div>
+            <div id="meetingPrepContent"><div class="placeholder"><div class="icon">ð</div><p>Meeting prep document will appear here</p></div></div>
           </div>
-          <div class="outreach-tab hidden" id="tab-outreach"><div class="placeholder"><div class="icon">📧</div><p>Outreach messages will appear here</p></div></div>
-          <div class="files-tab hidden" id="tab-files"><div class="placeholder"><div class="icon">📁</div><p>Generated files will appear here</p></div></div>
+          <div class="outreach-tab hidden" id="tab-outreach"><div class="placeholder"><div class="icon">ð§</div><p>Outreach messages will appear here</p></div></div>
+          <div class="files-tab hidden" id="tab-files"><div class="placeholder"><div class="icon">ð</div><p>Generated files will appear here</p></div></div>
         </div>
       </div>
     </div>
@@ -297,14 +297,14 @@ input::placeholder { color:var(--text-muted); } input:focus { outline:none; bord
 
 <script>
 const PHASES = [
-  { id:1, label:'Research', icon:'🔍' },
-  { id:2, label:'Knowledge Doc', icon:'📄' },
-  { id:3, label:'Sarah Prompt', icon:'✍️' },
-  { id:4, label:'Demo Build', icon:'🔨' },
-  { id:5, label:'Deploy', icon:'🚀' },
-  { id:6, label:'Meeting Prep', icon:'📋' },
-  { id:7, label:'Outreach', icon:'📧' },
-  { id:8, label:'Complete', icon:'✓' },
+  { id:1, label:'Research', icon:'ð' },
+  { id:2, label:'Knowledge Doc', icon:'ð' },
+  { id:3, label:'Sarah Prompt', icon:'âï¸' },
+  { id:4, label:'Demo Build', icon:'ð¨' },
+  { id:5, label:'Deploy', icon:'ð' },
+  { id:6, label:'Meeting Prep', icon:'ð' },
+  { id:7, label:'Outreach', icon:'ð§' },
+  { id:8, label:'Complete', icon:'â' },
 ];
 
 let prospects = JSON.parse(localStorage.getItem('prospects') || '[]');
@@ -332,8 +332,8 @@ function renderPhases() {
     div.className = 'phase' + (status === 'running' ? ' running' : '') + (status === 'done' ? ' done' : '') + (status === 'error' ? ' error' : '');
     let statusHtml = '';
     if (status === 'running') statusHtml = '<div class="spinner"></div>';
-    else if (status === 'done') statusHtml = '<span class="checkmark">✓</span>';
-    else if (status === 'error') statusHtml = '<span class="error-mark">✕</span>';
+    else if (status === 'done') statusHtml = '<span class="checkmark">â</span>';
+    else if (status === 'error') statusHtml = '<span class="error-mark">â</span>';
     div.innerHTML = '<div class="phase-icon">' + phase.icon + '</div><div class="phase-label">' + phase.label + '</div><div class="phase-status">' + statusHtml + '</div>';
     c.appendChild(div);
     if (idx < PHASES.length - 1) { const d = document.createElement('div'); d.className = 'phase-divider'; c.appendChild(d); }
@@ -401,6 +401,40 @@ async function streamApiCall(action, body) {
   return { html };
 }
 
+async function streamResearchCall(url) {
+  const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action:'research', url }) });
+  if (!res.ok) { const err = await res.json().catch(() => ({ error:res.statusText })); throw new Error(err.error || res.statusText); }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let researchData = null;
+  let lastError = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === 'progress') {
+            addLog(data.message, 1);
+          } else if (data.type === 'result') {
+            researchData = data.data;
+          } else if (data.type === 'error') {
+            lastError = data.message;
+          }
+        } catch {}
+      }
+    }
+  }
+  if (lastError) throw new Error(lastError);
+  if (!researchData) throw new Error('No research data received from server');
+  return researchData;
+}
+
 async function launchPipeline() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) { showError('Please enter a valid URL'); return; }
@@ -419,14 +453,24 @@ async function launchPipeline() {
   currentProspect = { id:Date.now(), name:prospectName, url, status:'in-progress', createdAt:new Date().toISOString(), data:{} };
 
   try {
-    // Phase 1: Research
+    // Phase 1: Deep Research (web crawl + Perplexity searches)
     phaseStatuses[1] = 'running'; renderPhases();
-    addLog('Researching ' + url + '...', 1);
-    const research = await apiCall('research', { url });
+    addLog('Starting deep research on ' + url + '...', 1);
+    addLog('Crawling website pages, searching Google, checking reviews...', 1);
+    const research = await streamResearchCall(url);
     pipelineData.research = research;
-    addLog('Research complete. Found ' + research.business_name, 1);
+    const peopleCount = research.owners_and_directors ? research.owners_and_directors.length : 0;
+    const competitorCount = research.competitors ? research.competitors.length : 0;
+    const pagesCount = research.website_pages_found ? research.website_pages_found.length : 0;
+    addLog('Deep research complete: ' + research.business_name + ' (' + pagesCount + ' pages crawled, ' + peopleCount + ' people found, ' + competitorCount + ' competitors identified)', 1);
+    if (research.google_reviews && research.google_reviews.rating && research.google_reviews.rating !== 'Not found') {
+      addLog('Google Reviews: ' + research.google_reviews.rating + ' stars (' + research.google_reviews.count + ' reviews)', 1);
+    }
+    if (research.confidence_level) {
+      addLog('Research confidence: ' + research.confidence_level, 1);
+    }
     phaseStatuses[1] = 'done'; phaseStatuses[2] = 'done'; renderPhases();
-    addLog('Knowledge doc generated automatically', 2);
+    addLog('Knowledge doc compiled from real sources', 2);
 
     // Phase 3: Sarah Prompt
     phaseStatuses[3] = 'running'; renderPhases();
@@ -652,7 +696,7 @@ function renderFactCheckResults(result) {
   if (p.verified_facts && p.verified_facts.length > 0) {
     html += '<div class="fact-result-section"><h5>Verified Facts (' + p.verified_facts.length + ')</h5>';
     p.verified_facts.forEach(f => {
-      html += '<div class="fact-result-item" style="border-left-color:var(--success);">✓ ' + (f || '').replace(/</g, '&lt;') + '</div>';
+      html += '<div class="fact-result-item" style="border-left-color:var(--success);">â ' + (f || '').replace(/</g, '&lt;') + '</div>';
     });
     html += '</div>';
   }
@@ -691,10 +735,10 @@ function renderResults() {
   if (pipelineData.outreach) {
     let html = '';
     const o = pipelineData.outreach;
-    if (o.email) html += makeOutreachCard('Email', '📧', typeof o.email === 'string' ? o.email : o.email.subject + '\n\n' + o.email.body);
-    if (o.linkedin) html += makeOutreachCard('LinkedIn', '💼', o.linkedin);
-    if (o.voicemail) html += makeOutreachCard('Voicemail Script', '📱', o.voicemail);
-    if (o.sms) html += makeOutreachCard('SMS', '💬', o.sms);
+    if (o.email) html += makeOutreachCard('Email', 'ð§', typeof o.email === 'string' ? o.email : o.email.subject + '\n\n' + o.email.body);
+    if (o.linkedin) html += makeOutreachCard('LinkedIn', 'ð¼', o.linkedin);
+    if (o.voicemail) html += makeOutreachCard('Voicemail Script', 'ð±', o.voicemail);
+    if (o.sms) html += makeOutreachCard('SMS', 'ð¬', o.sms);
     outreachTab.innerHTML = html;
   }
 
@@ -702,11 +746,11 @@ function renderResults() {
   const filesTab = document.getElementById('tab-files');
   if (pipelineData.research || pipelineData.prompt || pipelineData.demo) {
     let html = '';
-    if (pipelineData.research) html += makeFileItem('research.json', '📄', JSON.stringify(pipelineData.research, null, 2));
-    if (pipelineData.prompt) html += makeFileItem('sarah-prompt.txt', '✍️', pipelineData.prompt);
-    if (pipelineData.demo) html += makeFileItem('demo.html', '🌐', typeof pipelineData.demo === 'string' ? pipelineData.demo : JSON.stringify(pipelineData.demo, null, 2));
-    if (pipelineData.meetingPrep) html += makeFileItem('meeting-prep.html', '📋', typeof pipelineData.meetingPrep === 'string' ? pipelineData.meetingPrep : (pipelineData.meetingPrep.html || JSON.stringify(pipelineData.meetingPrep, null, 2)));
-    if (pipelineData.outreach) html += makeFileItem('outreach.json', '📧', JSON.stringify(pipelineData.outreach, null, 2));
+    if (pipelineData.research) html += makeFileItem('research.json', 'ð', JSON.stringify(pipelineData.research, null, 2));
+    if (pipelineData.prompt) html += makeFileItem('sarah-prompt.txt', 'âï¸', pipelineData.prompt);
+    if (pipelineData.demo) html += makeFileItem('demo.html', 'ð', typeof pipelineData.demo === 'string' ? pipelineData.demo : JSON.stringify(pipelineData.demo, null, 2));
+    if (pipelineData.meetingPrep) html += makeFileItem('meeting-prep.html', 'ð', typeof pipelineData.meetingPrep === 'string' ? pipelineData.meetingPrep : (pipelineData.meetingPrep.html || JSON.stringify(pipelineData.meetingPrep, null, 2)));
+    if (pipelineData.outreach) html += makeFileItem('outreach.json', 'ð§', JSON.stringify(pipelineData.outreach, null, 2));
     filesTab.innerHTML = html;
   }
 }
@@ -719,7 +763,7 @@ function makeOutreachCard(title, icon, content) {
 function makeFileItem(name, icon, content) {
   const id = 'file-' + name.replace(/[^a-z0-9]/gi, '-');
   const escaped = (content || '').substring(0, 500).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return '<div class="file-item"><button class="file-btn" onclick="toggleFile(\'' + id + '\')">' + icon + ' <span style="flex:1;font-family:monospace">' + name + '</span> <span style="color:var(--text-muted);font-size:10px">▶</span></button><div class="file-content hidden" id="' + id + '"><pre>' + escaped + (content && content.length > 500 ? '...' : '') + '</pre></div></div>';
+  return '<div class="file-item"><button class="file-btn" onclick="toggleFile(\'' + id + '\')">' + icon + ' <span style="flex:1;font-family:monospace">' + name + '</span> <span style="color:var(--text-muted);font-size:10px">â¶</span></button><div class="file-content hidden" id="' + id + '"><pre>' + escaped + (content && content.length > 500 ? '...' : '') + '</pre></div></div>';
 }
 
 function toggleFile(id) { document.getElementById(id).classList.toggle('hidden'); }
@@ -727,7 +771,7 @@ function toggleFile(id) { document.getElementById(id).classList.toggle('hidden')
 function copyText(btn, b64) {
   const text = decodeURIComponent(escape(atob(b64)));
   navigator.clipboard.writeText(text);
-  btn.textContent = '✓ Copied';
+  btn.textContent = 'â Copied';
   setTimeout(() => btn.textContent = 'Copy', 2000);
 }
 
@@ -753,14 +797,14 @@ document.getElementById('newPipelineBtn').addEventListener('click', () => {
   initPhases();
   document.getElementById('logContainer').innerHTML = '<div class="empty-log">No activity yet. Launch a pipeline to get started.</div>';
   hideError();
-  document.getElementById('tab-preview').innerHTML = '<div class="placeholder"><div class="icon">📊</div><p>Demo preview will appear here</p></div>';
-  document.getElementById('meetingPrepContent').innerHTML = '<div class="placeholder"><div class="icon">📋</div><p>Meeting prep document will appear here</p></div>';
+  document.getElementById('tab-preview').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Demo preview will appear here</p></div>';
+  document.getElementById('meetingPrepContent').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Meeting prep document will appear here</p></div>';
   document.getElementById('factCheckBar').classList.add('hidden');
   document.getElementById('factCheckResults').classList.add('hidden');
   document.getElementById('factCheckResults').innerHTML = '';
   document.getElementById('regenStatus').classList.add('hidden');
-  document.getElementById('tab-outreach').innerHTML = '<div class="placeholder"><div class="icon">📧</div><p>Outreach messages will appear here</p></div>';
-  document.getElementById('tab-files').innerHTML = '<div class="placeholder"><div class="icon">📁</div><p>Generated files will appear here</p></div>';
+  document.getElementById('tab-outreach').innerHTML = '<div class="placeholder"><div class="icon">ð§</div><p>Outreach messages will appear here</p></div>';
+  document.getElementById('tab-files').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Generated files will appear here</p></div>';
   renderProspects();
 });
 
