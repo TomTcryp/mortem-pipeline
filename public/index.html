@@ -1,863 +1,1248 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mortem AI - Pipeline</title>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Lato:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-:root {
-  --ink: #22364a;
-  --navy: #213761;
-  --bronze: #BD8656;
-  --bronze-light: #d4a373;
-  --dark-bg: #0f1923;
-  --card-bg: #162232;
-  --text: #e8e6e3;
-  --text-muted: #8a9bb0;
-  --border: #1e3048;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-}
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { width:100%; height:100%; background:var(--dark-bg); color:var(--text); font-family:'Lato',sans-serif; font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased; }
-h1,h2,h3,h4 { font-family:'Montserrat',sans-serif; font-weight:600; line-height:1.3; }
-a { color:var(--bronze); text-decoration:none; } a:hover { color:var(--bronze-light); }
-button { font-family:'Lato',sans-serif; border:none; cursor:pointer; transition:all .2s ease; border-radius:6px; font-weight:500; }
-button:disabled { opacity:.5; cursor:not-allowed; }
-input { font-family:'Lato',sans-serif; background:var(--card-bg); color:var(--text); border:1px solid var(--border); padding:10px 14px; border-radius:6px; font-size:14px; }
-input::placeholder { color:var(--text-muted); } input:focus { outline:none; border-color:var(--bronze); }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mortem AI - Pipeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #090f1a;
+      --bg-secondary: #0f1729;
+      --bg-card: #141e33;
+      --bg-elevated: #1a2642;
+      --border-primary: #1e2d4a;
+      --border-subtle: #162038;
+      --accent: #c8a96e;
+      --accent-light: #dfc08a;
+      --accent-dim: rgba(200,169,110,0.08);
+      --accent-glow: rgba(200,169,110,0.15);
+      --text-primary: #e8eaf0;
+      --text-secondary: #8896b0;
+      --text-tertiary: #5a6a84;
+      --success: #34d399;
+      --success-dim: rgba(52,211,153,0.1);
+      --warning: #fbbf24;
+      --warning-dim: rgba(251,191,36,0.1);
+      --error: #f87171;
+      --error-dim: rgba(248,113,113,0.1);
+      --info: #60a5fa;
+      --info-dim: rgba(96,165,250,0.1);
+    }
 
-#app { display:flex; width:100%; min-height:100vh; }
+    * { margin:0; padding:0; box-sizing:border-box; }
 
-.sidebar { width:280px; background:linear-gradient(180deg,var(--card-bg) 0%,var(--dark-bg) 100%); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; position:sticky; top:0; height:100vh; }
-.logo { padding:24px 20px; border-bottom:1px solid var(--border); text-align:center; }
-.logo h2 { font-size:20px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-.new-btn { margin:16px; padding:12px 16px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); font-weight:600; border-radius:8px; font-size:14px; box-shadow:0 4px 12px rgba(189,134,86,.15); }
-.new-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 6px 16px rgba(189,134,86,.25); }
-.prospects-label { padding:12px 16px 8px; font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); letter-spacing:.5px; }
-.prospects-list { flex:1; overflow-y:auto; }
-.prospect-item { width:100%; padding:12px 16px; background:transparent; border:none; cursor:pointer; display:flex; align-items:center; gap:12px; border-left:3px solid transparent; text-align:left; color:var(--text); font-size:13px; }
-.prospect-item:hover { background:rgba(189,134,86,.05); }
-.prospect-item.active { background:rgba(189,134,86,.1); border-left-color:var(--bronze); }
-.prospect-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
-.prospect-dot.deployed { background:var(--success); box-shadow:0 0 8px rgba(16,185,129,.4); }
-.prospect-dot.in-progress { background:var(--warning); animation:pulse 2s ease-in-out infinite; }
-.empty-prospects { padding:20px 16px; text-align:center; color:var(--text-muted); font-size:13px; }
-.settings-btn { margin:16px; margin-top:auto; padding:10px 14px; background:var(--card-bg); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:13px; }
-.settings-btn:hover { background:rgba(189,134,86,.1); border-color:var(--bronze); }
+    html, body {
+      width:100%; height:100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-.main { flex:1; display:flex; flex-direction:column; min-width:0; }
-.url-bar { padding:20px 24px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; background:linear-gradient(180deg,rgba(189,134,86,.02),transparent); }
-.url-bar input { flex:1; padding:12px 16px; font-size:14px; border-radius:8px; }
-.url-bar input:focus { border-color:var(--bronze); box-shadow:0 0 0 3px rgba(189,134,86,.1); }
-.launch-btn { padding:12px 28px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); font-weight:600; border-radius:8px; font-size:14px; white-space:nowrap; box-shadow:0 4px 12px rgba(189,134,86,.15); }
-.launch-btn:hover:not(:disabled) { transform:translateY(-2px); box-shadow:0 6px 16px rgba(189,134,86,.25); }
+    h1,h2,h3,h4 { font-family:'Inter',sans-serif; font-weight:600; line-height:1.3; }
+    a { color:var(--accent); text-decoration:none; transition:color .15s; }
+    a:hover { color:var(--accent-light); }
 
-.error-banner { padding:14px 24px; background:rgba(239,68,68,.1); border-bottom:1px solid rgba(239,68,68,.3); color:#fca5a5; display:flex; align-items:center; justify-content:space-between; font-size:13px; gap:16px; }
-.error-banner button { padding:6px 12px; background:rgba(239,68,68,.2); border:1px solid rgba(239,68,68,.4); color:#fca5a5; border-radius:4px; font-size:12px; }
+    button {
+      font-family:'Inter',sans-serif;
+      border:none; cursor:pointer;
+      transition: all .15s ease;
+      border-radius:8px;
+      font-weight:500;
+      font-size:13px;
+    }
+    button:disabled { opacity:.45; cursor:not-allowed; }
 
-.phase-tracker { padding:20px 24px; border-bottom:1px solid var(--border); }
-.phases { display:flex; align-items:center; justify-content:space-between; }
-.phase { flex:1; padding:16px 12px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; display:flex; flex-direction:column; align-items:center; gap:8px; text-align:center; transition:all .3s ease; }
-.phase.running { background:linear-gradient(135deg,rgba(245,158,11,.05),rgba(189,134,86,.05)); border-color:var(--warning); box-shadow:0 0 16px rgba(245,158,11,.1); animation:glow 2s ease-in-out infinite; }
-.phase.done { background:linear-gradient(135deg,rgba(16,185,129,.05),rgba(189,134,86,.05)); border-color:var(--success); }
-.phase.error { background:linear-gradient(135deg,rgba(239,68,68,.05),rgba(189,134,86,.05)); border-color:var(--error); }
-.phase-icon { font-size:24px; }
-.phase-label { font-size:12px; font-weight:600; text-transform:uppercase; color:var(--text-muted); letter-spacing:.3px; }
-.phase.running .phase-label { color:var(--warning); }
-.phase.done .phase-label { color:var(--success); }
-.phase.error .phase-label { color:var(--error); }
-.phase-status { height:20px; display:flex; align-items:center; justify-content:center; }
-.spinner { width:14px; height:14px; border:2px solid rgba(245,158,11,.3); border-top-color:var(--warning); border-radius:50%; animation:spin 1s linear infinite; }
-.checkmark { color:var(--success); font-weight:bold; font-size:16px; }
-.error-mark { color:var(--error); font-weight:bold; font-size:16px; }
-.phase-divider { flex:0 0 12px; height:2px; background:var(--border); margin:0 -6px; }
+    input {
+      font-family:'Inter',sans-serif;
+      background:var(--bg-secondary);
+      color:var(--text-primary);
+      border:1px solid var(--border-primary);
+      padding:10px 14px;
+      border-radius:8px;
+      font-size:13px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input::placeholder { color:var(--text-tertiary); }
+    input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(200,169,110,.08); }
 
-.results { display:grid; grid-template-columns:1fr 1fr; gap:20px; padding:20px 24px; }
-.activity-feed { display:flex; flex-direction:column; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; min-height:300px; }
-.activity-title { padding:16px 20px; border-bottom:1px solid var(--border); font-size:14px; font-weight:600; }
-.log-container { flex:1; overflow-y:auto; }
-.log-entry { padding:12px 16px; border-bottom:1px solid rgba(30,48,72,.5); display:flex; align-items:center; gap:12px; font-size:12px; animation:slideUp .3s ease-out; }
-.log-time { color:var(--text-muted); font-weight:500; flex-shrink:0; font-family:'Courier New',monospace; font-size:11px; }
-.log-phase { background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); padding:3px 8px; border-radius:4px; font-weight:600; font-size:10px; flex-shrink:0; text-transform:uppercase; }
-.log-message { color:var(--text); flex:1; word-break:break-word; }
-.empty-log { padding:40px 20px; text-align:center; color:var(--text-muted); font-size:13px; display:flex; align-items:center; justify-content:center; height:100%; }
+    /* Layout */
+    #app { display:flex; width:100%; min-height:100vh; }
 
-.results-panel { display:flex; flex-direction:column; background:var(--card-bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; min-height:400px; }
-.tabs-header { display:flex; gap:4px; padding:8px 12px; border-bottom:1px solid var(--border); background:rgba(30,48,72,.3); }
-.tab { flex:1; padding:10px 14px; background:transparent; color:var(--text-muted); border:none; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer; }
-.tab:hover { background:rgba(189,134,86,.1); }
-.tab.active { background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); }
-.tab-content { flex:1; display:flex; flex-direction:column; }
+    .sidebar {
+      width:260px;
+      background:var(--bg-secondary);
+      border-right:1px solid var(--border-primary);
+      display:flex; flex-direction:column;
+      overflow-y:auto;
+      position:sticky; top:0; height:100vh;
+    }
 
-.preview-tab { flex:1; display:flex; flex-direction:column; }
-.preview-link { padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(189,134,86,.05); font-size:12px; }
-.preview-link a { word-break:break-all; }
-.preview-iframe { flex:1; border:none; background:var(--dark-bg); min-height:500px; }
-.placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; color:var(--text-muted); font-size:13px; }
-.placeholder .icon { font-size:32px; }
+    .logo {
+      padding:20px;
+      border-bottom:1px solid var(--border-primary);
+      display:flex; align-items:center; gap:10px;
+    }
+    .logo svg { flex-shrink:0; }
+    .logo h2 {
+      font-size:16px; font-weight:700;
+      color:var(--accent);
+      letter-spacing:-0.3px;
+    }
+    .logo span {
+      font-size:10px; font-weight:500;
+      color:var(--text-tertiary);
+      background:var(--bg-elevated);
+      padding:2px 6px; border-radius:4px;
+      text-transform:uppercase; letter-spacing:.5px;
+    }
 
-.outreach-tab { flex:1; overflow-y:auto; padding:16px; }
-.outreach-card { background:rgba(189,134,86,.05); border:1px solid rgba(189,134,86,.2); border-radius:8px; overflow:hidden; margin-bottom:16px; }
-.card-header { padding:12px 14px; border-bottom:1px solid rgba(189,134,86,.2); display:flex; align-items:center; justify-content:space-between; }
-.card-header h4 { margin:0; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px; }
-.copy-btn { padding:4px 8px; background:rgba(189,134,86,.2); border:1px solid rgba(189,134,86,.3); color:var(--bronze); border-radius:4px; font-size:11px; font-weight:600; }
-.copy-btn:hover { background:rgba(189,134,86,.3); }
-.card-content { padding:12px 14px; background:rgba(0,0,0,.2); }
-.card-content pre { margin:0; font-size:12px; line-height:1.4; font-family:'Courier New',monospace; white-space:pre-wrap; word-wrap:break-word; }
+    .new-btn {
+      margin:16px;
+      padding:10px 16px;
+      background:var(--accent);
+      color:var(--bg-primary);
+      font-weight:600;
+      font-size:13px;
+      display:flex; align-items:center; gap:8px; justify-content:center;
+    }
+    .new-btn:hover:not(:disabled) { background:var(--accent-light); }
 
-.files-tab { flex:1; overflow-y:auto; padding:16px; }
-.file-item { border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-bottom:8px; }
-.file-btn { width:100%; padding:10px 12px; background:transparent; border:none; cursor:pointer; display:flex; align-items:center; gap:8px; color:var(--text); font-size:12px; }
-.file-btn:hover { background:rgba(189,134,86,.1); }
-.file-content { padding:12px; background:rgba(0,0,0,.3); border-top:1px solid var(--border); }
-.file-content pre { margin:0; font-size:11px; line-height:1.4; font-family:'Courier New',monospace; color:var(--text-muted); white-space:pre-wrap; word-wrap:break-word; }
+    .prospects-label {
+      padding:12px 16px 6px;
+      font-size:11px; font-weight:600;
+      text-transform:uppercase; letter-spacing:.8px;
+      color:var(--text-tertiary);
+    }
 
-.fact-check-bar { padding:12px 16px; border-bottom:1px solid var(--border); background:rgba(189,134,86,.05); display:flex; align-items:center; gap:12px; }
-.fact-check-btn { padding:8px 16px; background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; font-weight:600; border-radius:6px; font-size:13px; }
-.fact-check-btn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 4px 12px rgba(99,102,241,.3); }
-.fact-check-btn.checking { background:linear-gradient(135deg,#f59e0b,#d97706); }
-.auto-regen-toggle { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-muted); }
-.toggle-switch { position:relative; width:36px; height:20px; background:var(--border); border-radius:10px; cursor:pointer; transition:background .2s; }
-.toggle-switch.active { background:var(--success); }
-.toggle-switch::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:transform .2s; }
-.toggle-switch.active::after { transform:translateX(16px); }
-.fact-check-results { padding:16px; background:rgba(0,0,0,.2); border-bottom:1px solid var(--border); max-height:300px; overflow-y:auto; }
-.fact-result-section { margin-bottom:12px; }
-.fact-result-section h5 { font-size:12px; font-weight:600; text-transform:uppercase; color:var(--bronze); margin-bottom:6px; letter-spacing:.3px; }
-.fact-result-item { padding:8px 12px; background:rgba(189,134,86,.05); border-left:3px solid var(--bronze); border-radius:0 4px 4px 0; margin-bottom:4px; font-size:12px; line-height:1.5; }
-.fact-result-item.correction { border-left-color:var(--warning); }
-.fact-result-item.new-info { border-left-color:var(--success); }
-.accuracy-badge { padding:4px 10px; border-radius:12px; font-size:11px; font-weight:600; text-transform:uppercase; }
-.accuracy-badge.high { background:rgba(16,185,129,.15); color:var(--success); }
-.accuracy-badge.medium { background:rgba(245,158,11,.15); color:var(--warning); }
-.accuracy-badge.low { background:rgba(239,68,68,.15); color:var(--error); }
-.regen-status { padding:8px 16px; background:rgba(16,185,129,.1); border-bottom:1px solid rgba(16,185,129,.3); font-size:12px; color:var(--success); display:flex; align-items:center; gap:8px; }
+    .prospects-list { flex:1; overflow-y:auto; }
 
-.modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,25,35,.8); display:flex; align-items:center; justify-content:center; z-index:1000; backdrop-filter:blur(4px); }
-.modal { background:var(--card-bg); border:1px solid var(--border); border-radius:12px; padding:32px; max-width:500px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,.5); animation:slideUp .3s ease-out; }
-.modal h2 { margin:0 0 8px; font-size:20px; }
-.modal .desc { color:var(--text-muted); font-size:13px; margin:0 0 24px; }
-.field { margin-bottom:20px; }
-.field label { display:block; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; }
-.field input { width:100%; padding:10px 12px; font-size:13px; }
-.field .hint { font-size:12px; color:var(--text-muted); margin:6px 0 0; }
-.modal-actions { display:flex; gap:12px; margin-top:28px; }
-.cancel-btn { flex:1; padding:10px 14px; background:var(--card-bg); border:1px solid var(--border); color:var(--text); border-radius:6px; font-size:13px; }
-.save-btn { flex:1; padding:10px 14px; background:linear-gradient(135deg,var(--bronze),var(--bronze-light)); color:var(--dark-bg); border-radius:6px; font-size:13px; font-weight:600; }
+    .prospect-item {
+      width:100%; padding:10px 16px;
+      background:transparent; border:none; cursor:pointer;
+      display:flex; align-items:center; gap:10px;
+      border-left:2px solid transparent;
+      text-align:left; color:var(--text-primary); font-size:13px;
+    }
+    .prospect-item:hover { background:var(--accent-dim); }
+    .prospect-item.active { background:var(--accent-dim); border-left-color:var(--accent); }
 
-.hidden { display:none!important; }
-@keyframes spin { to { transform:rotate(360deg); } }
-@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
-@keyframes glow { 0%,100% { box-shadow:0 0 0 0 rgba(189,134,86,.3); } 50% { box-shadow:0 0 0 8px rgba(189,134,86,0); } }
-@keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
-@media (max-width:1400px) { .results { grid-template-columns:1fr; } }
+    .prospect-dot {
+      width:8px; height:8px; border-radius:50%; flex-shrink:0;
+    }
+    .prospect-dot.deployed { background:var(--success); box-shadow:0 0 6px rgba(52,211,153,.4); }
+    .prospect-dot.in-progress { background:var(--warning); animation:pulse 2s ease-in-out infinite; }
 
-/* Hamburger menu button */
-.hamburger { display:none; position:fixed; top:12px; left:12px; z-index:1100; width:44px; height:44px; background:var(--card-bg); border:1px solid var(--border); border-radius:8px; flex-direction:column; align-items:center; justify-content:center; gap:5px; cursor:pointer; }
-.hamburger span { display:block; width:22px; height:2px; background:var(--bronze); border-radius:2px; transition:all .3s ease; }
-.hamburger.active span:nth-child(1) { transform:rotate(45deg) translate(5px,5px); }
-.hamburger.active span:nth-child(2) { opacity:0; }
-.hamburger.active span:nth-child(3) { transform:rotate(-45deg) translate(5px,-5px); }
-.sidebar-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,25,35,.7); z-index:1000; backdrop-filter:blur(2px); }
-.sidebar-overlay.visible { display:block; }
+    .empty-prospects {
+      padding:24px 16px; text-align:center;
+      color:var(--text-tertiary); font-size:12px;
+    }
 
-/* Activity log collapsible */
-.activity-toggle { display:none; padding:8px 12px; background:rgba(189,134,86,.1); border:1px solid rgba(189,134,86,.2); border-radius:6px; color:var(--bronze); font-size:12px; font-weight:600; margin-top:8px; width:100%; text-align:center; cursor:pointer; }
+    .settings-btn {
+      margin:16px; margin-top:auto;
+      padding:9px 14px;
+      background:transparent;
+      color:var(--text-secondary);
+      border:1px solid var(--border-primary);
+      font-size:12px;
+      display:flex; align-items:center; gap:8px; justify-content:center;
+    }
+    .settings-btn:hover { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+    .settings-btn svg { opacity:.6; }
+    .settings-btn:hover svg { opacity:1; }
 
-/* Mobile: 900px and below */
-@media (max-width:900px) {
-  .hamburger { display:flex; }
-  .sidebar { position:fixed; top:0; left:-300px; width:280px; z-index:1050; height:100vh; transition:left .3s ease; box-shadow:none; }
-  .sidebar.open { left:0; box-shadow:4px 0 24px rgba(0,0,0,.5); }
-  .main { margin-left:0; }
-  .url-bar { flex-wrap:wrap; padding:16px 16px 16px 60px; gap:8px; }
-  .url-bar input { flex:unset!important; width:100%; }
-  .launch-btn { width:100%; text-align:center; }
-  .phase-tracker { padding:12px 16px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
-  .phases { min-width:600px; gap:4px; }
-  .phase { padding:10px 6px; min-width:60px; }
-  .phase-icon { font-size:18px; }
-  .phase-label { font-size:9px; }
-  .phase-divider { flex:0 0 8px; }
-  .results { padding:12px 16px; gap:12px; }
-  .activity-feed { min-height:unset; }
-  .activity-feed .log-container { max-height:200px; overflow-y:auto; }
-  .activity-feed .log-container.expanded { max-height:none; }
-  .activity-toggle { display:block; }
-  .results-panel { min-height:300px; }
-  .tabs-header { gap:2px; padding:6px 8px; }
-  .tab { padding:12px 8px; font-size:12px; font-weight:600; min-height:44px; display:flex; align-items:center; justify-content:center; }
-  .tab.active { box-shadow:0 2px 8px rgba(189,134,86,.3); }
-  .log-entry { padding:10px 12px; gap:8px; }
-  .log-time { font-size:10px; }
-  .log-phase { font-size:9px; padding:2px 6px; }
-  .log-message { font-size:12px; }
-  .fact-check-bar { flex-wrap:wrap; padding:10px 12px; gap:8px; }
-  .fact-check-btn { font-size:12px; padding:10px 14px; min-height:44px; }
-  .auto-regen-toggle { font-size:11px; }
-  .preview-iframe { min-height:350px; }
-  .modal { padding:20px; max-width:95%; }
-  .modal h2 { font-size:18px; }
-  .error-banner { padding:12px 16px; font-size:12px; flex-wrap:wrap; gap:8px; }
-}
+    /* Main area */
+    .main { flex:1; display:flex; flex-direction:column; min-width:0; }
 
-/* Small phones: 480px and below */
-@media (max-width:480px) {
-  .url-bar { padding:12px 12px 12px 56px; }
-  .phase-tracker { padding:10px 12px; }
-  .phases { min-width:520px; }
-  .phase { padding:8px 4px; min-width:50px; }
-  .phase-icon { font-size:16px; }
-  .phase-label { font-size:8px; }
-  .results { padding:10px 12px; gap:10px; }
-  .tab { font-size:11px; padding:10px 4px; }
-  .activity-title { padding:12px 14px; font-size:13px; }
-  .preview-iframe { min-height:280px; }
-  .outreach-tab { padding:10px; }
-  .card-content pre { font-size:11px; }
-  .modal { padding:16px; }
-  .field input { padding:12px 10px; font-size:14px; }
-}
-</style>
+    .url-bar {
+      padding:16px 24px;
+      border-bottom:1px solid var(--border-primary);
+      display:flex; gap:10px; align-items:center;
+      background:var(--bg-secondary);
+    }
+    .url-bar input { flex:1; padding:10px 14px; font-size:13px; }
+
+    .launch-btn {
+      padding:10px 24px;
+      background:var(--accent);
+      color:var(--bg-primary);
+      font-weight:600; font-size:13px;
+      white-space:nowrap;
+      display:flex; align-items:center; gap:6px;
+    }
+    .launch-btn:hover:not(:disabled) { background:var(--accent-light); }
+
+    .error-banner {
+      padding:12px 24px;
+      background:var(--error-dim);
+      border-bottom:1px solid rgba(248,113,113,.2);
+      color:var(--error);
+      display:flex; align-items:center; justify-content:space-between;
+      font-size:12px; gap:16px;
+    }
+    .error-banner button {
+      padding:5px 10px;
+      background:rgba(248,113,113,.15);
+      border:1px solid rgba(248,113,113,.3);
+      color:var(--error); font-size:11px;
+    }
+
+    /* Phase tracker */
+    .phase-tracker {
+      padding:16px 24px;
+      border-bottom:1px solid var(--border-primary);
+      background:var(--bg-secondary);
+    }
+
+    .phases { display:flex; align-items:center; gap:2px; }
+
+    .phase {
+      flex:1; padding:12px 8px;
+      background:var(--bg-card);
+      border:1px solid var(--border-subtle);
+      border-radius:8px;
+      display:flex; flex-direction:column; align-items:center; gap:6px;
+      text-align:center; transition:all .2s ease;
+    }
+    .phase.running {
+      border-color:var(--warning);
+      background:var(--warning-dim);
+      box-shadow:0 0 12px rgba(251,191,36,.06);
+    }
+    .phase.done {
+      border-color:rgba(52,211,153,.3);
+      background:var(--success-dim);
+    }
+    .phase.error {
+      border-color:rgba(248,113,113,.3);
+      background:var(--error-dim);
+    }
+
+    .phase-icon {
+      width:28px; height:28px;
+      display:flex; align-items:center; justify-content:center;
+      color:var(--text-tertiary);
+    }
+    .phase.running .phase-icon { color:var(--warning); }
+    .phase.done .phase-icon { color:var(--success); }
+    .phase.error .phase-icon { color:var(--error); }
+
+    .phase-label {
+      font-size:10px; font-weight:600;
+      text-transform:uppercase; letter-spacing:.4px;
+      color:var(--text-tertiary);
+    }
+    .phase.running .phase-label { color:var(--warning); }
+    .phase.done .phase-label { color:var(--success); }
+    .phase.error .phase-label { color:var(--error); }
+
+    .phase-status { height:16px; display:flex; align-items:center; justify-content:center; }
+
+    .spinner {
+      width:12px; height:12px;
+      border:2px solid rgba(251,191,36,.2);
+      border-top-color:var(--warning);
+      border-radius:50%;
+      animation:spin .8s linear infinite;
+    }
+    .checkmark { color:var(--success); font-weight:600; font-size:13px; }
+    .error-mark { color:var(--error); font-weight:600; font-size:13px; }
+
+    .phase-divider {
+      flex:0 0 1px; height:24px;
+      background:var(--border-subtle);
+    }
+
+    /* Results grid */
+    .results {
+      display:grid; grid-template-columns:1fr 1fr;
+      gap:16px; padding:16px 24px; flex:1;
+    }
+
+    .activity-feed {
+      display:flex; flex-direction:column;
+      background:var(--bg-card);
+      border:1px solid var(--border-primary);
+      border-radius:10px; overflow:hidden;
+      min-height:300px;
+    }
+
+    .activity-title {
+      padding:14px 18px;
+      border-bottom:1px solid var(--border-primary);
+      font-size:12px; font-weight:600;
+      text-transform:uppercase; letter-spacing:.5px;
+      color:var(--text-secondary);
+      display:flex; align-items:center; gap:8px;
+    }
+    .activity-title svg { color:var(--text-tertiary); }
+
+    .log-container { flex:1; overflow-y:auto; }
+
+    .log-entry {
+      padding:10px 16px;
+      border-bottom:1px solid var(--border-subtle);
+      display:flex; align-items:flex-start; gap:10px;
+      font-size:12px;
+      animation:slideUp .25s ease-out;
+    }
+    .log-time {
+      color:var(--text-tertiary); font-weight:500; flex-shrink:0;
+      font-family:'JetBrains Mono',monospace; font-size:10px;
+      padding-top:2px;
+    }
+    .log-phase {
+      background:var(--accent-dim); border:1px solid rgba(200,169,110,.15);
+      color:var(--accent); padding:1px 7px; border-radius:4px;
+      font-weight:600; font-size:9px; flex-shrink:0;
+      text-transform:uppercase; letter-spacing:.3px;
+    }
+    .log-message { color:var(--text-secondary); flex:1; word-break:break-word; line-height:1.5; }
+
+    .empty-log {
+      padding:40px 20px; text-align:center;
+      color:var(--text-tertiary); font-size:12px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      height:100%; gap:8px;
+    }
+
+    /* Results panel */
+    .results-panel {
+      display:flex; flex-direction:column;
+      background:var(--bg-card);
+      border:1px solid var(--border-primary);
+      border-radius:10px; overflow:hidden;
+      min-height:400px;
+    }
+
+    .tabs-header {
+      display:flex; gap:1px; padding:6px;
+      border-bottom:1px solid var(--border-primary);
+      background:var(--bg-secondary);
+    }
+    .tab {
+      flex:1; padding:8px 12px;
+      background:transparent; color:var(--text-tertiary);
+      border:none; border-radius:6px; font-size:12px; font-weight:500;
+    }
+    .tab:hover { background:var(--accent-dim); color:var(--text-secondary); }
+    .tab.active {
+      background:var(--accent);
+      color:var(--bg-primary);
+      font-weight:600;
+    }
+
+    .tab-content { flex:1; display:flex; flex-direction:column; }
+
+    .preview-tab { flex:1; display:flex; flex-direction:column; }
+    .preview-link {
+      padding:10px 16px;
+      border-bottom:1px solid var(--border-primary);
+      background:var(--accent-dim);
+      font-size:11px; font-family:'JetBrains Mono',monospace;
+    }
+    .preview-iframe { flex:1; border:none; background:var(--bg-primary); min-height:500px; }
+
+    .placeholder {
+      flex:1; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:12px;
+      color:var(--text-tertiary); font-size:12px;
+    }
+    .placeholder svg { opacity:.3; }
+
+    /* Outreach cards */
+    .outreach-tab { flex:1; overflow-y:auto; padding:16px; }
+    .outreach-card {
+      background:var(--bg-elevated);
+      border:1px solid var(--border-primary);
+      border-radius:8px; overflow:hidden; margin-bottom:12px;
+    }
+    .card-header {
+      padding:10px 14px;
+      border-bottom:1px solid var(--border-primary);
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .card-header h4 {
+      margin:0; font-size:12px; font-weight:600;
+      display:flex; align-items:center; gap:8px;
+      color:var(--text-secondary);
+    }
+    .card-header h4 svg { color:var(--accent); }
+    .copy-btn {
+      padding:4px 10px;
+      background:var(--accent-dim); border:1px solid rgba(200,169,110,.15);
+      color:var(--accent); font-size:10px; font-weight:600;
+    }
+    .copy-btn:hover { background:var(--accent-glow); }
+    .card-content { padding:14px; background:rgba(0,0,0,.15); }
+    .card-content pre {
+      margin:0; font-size:12px; line-height:1.5;
+      font-family:'JetBrains Mono',monospace;
+      white-space:pre-wrap; word-wrap:break-word;
+      color:var(--text-secondary);
+    }
+
+    /* Files tab */
+    .files-tab { flex:1; overflow-y:auto; padding:16px; }
+    .file-item { border:1px solid var(--border-primary); border-radius:6px; overflow:hidden; margin-bottom:8px; }
+    .file-btn {
+      width:100%; padding:9px 12px;
+      background:transparent; border:none; cursor:pointer;
+      display:flex; align-items:center; gap:8px;
+      color:var(--text-primary); font-size:12px;
+    }
+    .file-btn:hover { background:var(--accent-dim); }
+    .file-btn svg { color:var(--accent); flex-shrink:0; }
+    .file-content {
+      padding:12px; background:rgba(0,0,0,.2);
+      border-top:1px solid var(--border-primary);
+    }
+    .file-content pre {
+      margin:0; font-size:11px; line-height:1.4;
+      font-family:'JetBrains Mono',monospace;
+      color:var(--text-tertiary); white-space:pre-wrap; word-wrap:break-word;
+    }
+
+    /* Fact check */
+    .fact-check-bar {
+      padding:10px 16px;
+      border-bottom:1px solid var(--border-primary);
+      background:var(--bg-elevated);
+      display:flex; align-items:center; gap:12px;
+    }
+    .fact-check-btn {
+      padding:8px 16px;
+      background:linear-gradient(135deg,#6366f1,#8b5cf6);
+      color:#fff; font-weight:600; font-size:12px;
+    }
+    .fact-check-btn:hover:not(:disabled) { box-shadow:0 4px 12px rgba(99,102,241,.25); }
+    .fact-check-btn.checking { background:linear-gradient(135deg,#f59e0b,#d97706); }
+
+    .auto-regen-toggle {
+      display:flex; align-items:center; gap:8px;
+      font-size:11px; color:var(--text-tertiary);
+    }
+    .toggle-switch {
+      position:relative; width:32px; height:18px;
+      background:var(--border-primary); border-radius:9px;
+      cursor:pointer; transition:background .2s;
+    }
+    .toggle-switch.active { background:var(--success); }
+    .toggle-switch::after {
+      content:''; position:absolute; top:2px; left:2px;
+      width:14px; height:14px; background:#fff;
+      border-radius:50%; transition:transform .2s;
+    }
+    .toggle-switch.active::after { transform:translateX(14px); }
+
+    .fact-check-results {
+      padding:16px; background:rgba(0,0,0,.15);
+      border-bottom:1px solid var(--border-primary);
+      max-height:300px; overflow-y:auto;
+    }
+    .fact-result-section { margin-bottom:12px; }
+    .fact-result-section h5 {
+      font-size:11px; font-weight:600; text-transform:uppercase;
+      color:var(--accent); margin-bottom:6px; letter-spacing:.4px;
+    }
+    .fact-result-item {
+      padding:8px 12px;
+      background:var(--accent-dim);
+      border-left:3px solid var(--accent);
+      border-radius:0 6px 6px 0;
+      margin-bottom:4px; font-size:11px; line-height:1.5;
+    }
+    .fact-result-item.correction { border-left-color:var(--warning); }
+    .fact-result-item.new-info { border-left-color:var(--success); }
+
+    .accuracy-badge {
+      padding:3px 10px; border-radius:10px;
+      font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.3px;
+    }
+    .accuracy-badge.high { background:var(--success-dim); color:var(--success); }
+    .accuracy-badge.medium { background:var(--warning-dim); color:var(--warning); }
+    .accuracy-badge.low { background:var(--error-dim); color:var(--error); }
+
+    .regen-status {
+      padding:8px 16px;
+      background:var(--success-dim);
+      border-bottom:1px solid rgba(52,211,153,.2);
+      font-size:11px; color:var(--success);
+      display:flex; align-items:center; gap:8px;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      position:fixed; top:0; left:0; right:0; bottom:0;
+      background:rgba(9,15,26,.85);
+      display:flex; align-items:center; justify-content:center;
+      z-index:1000; backdrop-filter:blur(8px);
+    }
+    .modal {
+      background:var(--bg-card);
+      border:1px solid var(--border-primary);
+      border-radius:12px; padding:28px;
+      max-width:460px; width:90%;
+      box-shadow:0 24px 80px rgba(0,0,0,.6);
+      animation:slideUp .2s ease-out;
+    }
+    .modal h2 { margin:0 0 6px; font-size:18px; }
+    .modal .desc { color:var(--text-tertiary); font-size:12px; margin:0 0 20px; }
+
+    .field { margin-bottom:16px; }
+    .field label {
+      display:block; font-size:11px; font-weight:600;
+      text-transform:uppercase; letter-spacing:.5px;
+      margin-bottom:5px; color:var(--text-secondary);
+    }
+    .field input { width:100%; padding:9px 12px; font-size:13px; }
+    .field .hint { font-size:11px; color:var(--text-tertiary); margin:4px 0 0; }
+
+    .modal-actions { display:flex; gap:10px; margin-top:24px; }
+    .cancel-btn {
+      flex:1; padding:9px 14px;
+      background:transparent; border:1px solid var(--border-primary);
+      color:var(--text-secondary); font-size:12px;
+    }
+    .save-btn {
+      flex:1; padding:9px 14px;
+      background:var(--accent); color:var(--bg-primary);
+      font-size:12px; font-weight:600;
+    }
+
+    .hidden { display:none!important; }
+
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+    @keyframes slideUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+
+    @media (max-width:1400px) { .results { grid-template-columns:1fr; } }
+
+    /* Hamburger */
+    .hamburger {
+      display:none; position:fixed; top:10px; left:10px; z-index:1100;
+      width:40px; height:40px;
+      background:var(--bg-card); border:1px solid var(--border-primary); border-radius:8px;
+      flex-direction:column; align-items:center; justify-content:center; gap:4px;
+    }
+    .hamburger span {
+      display:block; width:18px; height:2px;
+      background:var(--accent); border-radius:1px; transition:all .2s ease;
+    }
+    .hamburger.active span:nth-child(1) { transform:rotate(45deg) translate(4px,4px); }
+    .hamburger.active span:nth-child(2) { opacity:0; }
+    .hamburger.active span:nth-child(3) { transform:rotate(-45deg) translate(4px,-4px); }
+
+    .sidebar-overlay {
+      display:none; position:fixed; top:0; left:0; right:0; bottom:0;
+      background:rgba(9,15,26,.7); z-index:1000; backdrop-filter:blur(4px);
+    }
+    .sidebar-overlay.visible { display:block; }
+
+    .activity-toggle {
+      display:none; padding:8px 12px;
+      background:var(--accent-dim); border:1px solid rgba(200,169,110,.1);
+      color:var(--accent); font-size:11px; font-weight:600;
+      margin-top:4px; width:100%; text-align:center;
+    }
+
+    @media (max-width:900px) {
+      .hamburger { display:flex; }
+      .sidebar {
+        position:fixed; top:0; left:-280px; width:260px;
+        z-index:1050; height:100vh; transition:left .25s ease;
+      }
+      .sidebar.open { left:0; box-shadow:4px 0 24px rgba(0,0,0,.5); }
+      .url-bar { flex-wrap:wrap; padding:14px 14px 14px 56px; gap:8px; }
+      .url-bar input { flex:unset!important; width:100%; }
+      .launch-btn { width:100%; justify-content:center; }
+      .phase-tracker { padding:10px 14px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      .phases { min-width:580px; gap:2px; }
+      .phase { padding:8px 6px; min-width:55px; }
+      .phase-icon svg { width:18px; height:18px; }
+      .phase-label { font-size:8px; }
+      .results { padding:10px 14px; gap:10px; }
+      .activity-feed { min-height:unset; }
+      .activity-feed .log-container { max-height:180px; overflow-y:auto; }
+      .activity-feed .log-container.expanded { max-height:none; }
+      .activity-toggle { display:block; }
+      .results-panel { min-height:280px; }
+      .tabs-header { gap:1px; padding:4px; }
+      .tab { padding:10px 6px; font-size:11px; min-height:40px; display:flex; align-items:center; justify-content:center; }
+      .log-entry { padding:8px 12px; gap:6px; }
+      .fact-check-bar { flex-wrap:wrap; padding:8px 12px; gap:6px; }
+      .preview-iframe { min-height:320px; }
+      .modal { padding:20px; max-width:95%; }
+    }
+
+    @media (max-width:480px) {
+      .url-bar { padding:10px 10px 10px 50px; }
+      .phases { min-width:500px; }
+      .phase { min-width:45px; padding:6px 4px; }
+      .phase-label { font-size:7px; }
+      .results { padding:8px 10px; gap:8px; }
+      .tab { font-size:10px; padding:8px 4px; }
+      .preview-iframe { min-height:260px; }
+      .modal { padding:16px; }
+    }
+  </style>
 </head>
 <body>
-<div id="app">
-  <button class="hamburger" id="hamburgerBtn"><span></span><span></span><span></span></button>
-  <div class="sidebar-overlay" id="sidebarOverlay"></div>
-  <aside class="sidebar" id="sidebar">
-    <div class="logo"><h2>Mortem AI</h2></div>
-    <button class="new-btn" id="newPipelineBtn">+ New Pipeline</button>
-    <div class="prospects-label">Recent Prospects</div>
-    <div class="prospects-list" id="prospectsList"><div class="empty-prospects">No prospects yet</div></div>
-    <button class="settings-btn" id="settingsBtn">Settings</button>
-  </aside>
+  <div id="app">
+    <button class="hamburger" id="hamburgerBtn"><span></span><span></span><span></span></button>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-  <main class="main">
-    <div class="url-bar">
-      <input type="text" id="urlInput" placeholder="Enter funeral home URL..." style="flex:2">
-      <input type="text" id="contactInput" placeholder="Contact name (optional)" style="flex:1">
-      <input type="text" id="roleInput" placeholder="Role (optional)" style="flex:0.7">
-      <button class="launch-btn" id="launchBtn">Launch Pipeline</button>
-    </div>
-    <div class="error-banner hidden" id="errorBanner"><span id="errorText"></span><button id="retryBtn">Retry</button></div>
-
-    <div class="phase-tracker">
-      <div class="phases" id="phasesContainer"></div>
-    </div>
-
-    <div class="results">
-      <div class="activity-feed">
-        <h3 class="activity-title">Activity Log</h3>
-        <div class="log-container" id="logContainer"><div class="empty-log">No activity yet. Launch a pipeline to get started.</div></div>
-        <button class="activity-toggle" id="activityToggle" onclick="toggleActivityLog()">Show all entries</button>
+    <aside class="sidebar" id="sidebar">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+        <h2>Mortem AI</h2>
+        <span>Pipeline</span>
       </div>
-      <div class="results-panel">
-        <div class="tabs-header">
-          <button class="tab active" data-tab="preview">Preview</button>
-          <button class="tab" data-tab="meeting-prep">Meeting Prep</button>
-          <button class="tab" data-tab="outreach">Outreach</button>
-          <button class="tab" data-tab="files">Files</button>
+      <button class="new-btn" id="newPipelineBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Pipeline
+      </button>
+      <div class="prospects-label">Recent Prospects</div>
+      <div class="prospects-list" id="prospectsList"><div class="empty-prospects">No prospects yet</div></div>
+      <button class="settings-btn" id="settingsBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </aside>
+
+    <main class="main">
+      <div class="url-bar">
+        <input type="text" id="urlInput" placeholder="Enter funeral home URL..." style="flex:2">
+        <input type="text" id="contactInput" placeholder="Contact name (optional)" style="flex:1">
+        <input type="text" id="roleInput" placeholder="Role (optional)" style="flex:0.7">
+        <button class="launch-btn" id="launchBtn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Launch Pipeline
+        </button>
+      </div>
+
+      <div class="error-banner hidden" id="errorBanner"><span id="errorText"></span><button id="retryBtn">Retry</button></div>
+
+      <div class="phase-tracker">
+        <div class="phases" id="phasesContainer"></div>
+      </div>
+
+      <div class="results">
+        <div class="activity-feed">
+          <h3 class="activity-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Activity Log
+          </h3>
+          <div class="log-container" id="logContainer"><div class="empty-log">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-tertiary)"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            No activity yet. Launch a pipeline to get started.
+          </div></div>
+          <button class="activity-toggle" id="activityToggle" onclick="toggleActivityLog()">Show all entries</button>
         </div>
-        <div class="tab-content">
-          <div class="preview-tab" id="tab-preview"><div class="placeholder"><div class="icon">ð</div><p>Demo preview will appear here</p></div></div>
-          <div class="preview-tab hidden" id="tab-meeting-prep">
-            <div class="fact-check-bar hidden" id="factCheckBar">
-              <button class="fact-check-btn" id="factCheckBtn" onclick="runFactCheck()">Fact-Check with Perplexity</button>
-              <div class="auto-regen-toggle">
-                <div class="toggle-switch" id="autoRegenToggle" onclick="this.classList.toggle('active')"></div>
-                <span>Auto-regenerate after check</span>
-              </div>
-              <span id="factCheckStatus" style="font-size:12px;color:var(--text-muted);margin-left:auto;"></span>
-            </div>
-            <div class="fact-check-results hidden" id="factCheckResults"></div>
-            <div class="regen-status hidden" id="regenStatus"><div class="spinner" style="width:12px;height:12px;border-width:2px;"></div> Regenerating with fact-checked data...</div>
-            <div id="meetingPrepContent"><div class="placeholder"><div class="icon">ð</div><p>Meeting prep document will appear here</p></div></div>
+
+        <div class="results-panel">
+          <div class="tabs-header">
+            <button class="tab active" data-tab="preview">Preview</button>
+            <button class="tab" data-tab="meeting-prep">Meeting Prep</button>
+            <button class="tab" data-tab="outreach">Outreach</button>
+            <button class="tab" data-tab="files">Files</button>
           </div>
-          <div class="outreach-tab hidden" id="tab-outreach"><div class="placeholder"><div class="icon">ð§</div><p>Outreach messages will appear here</p></div></div>
-          <div class="files-tab hidden" id="tab-files"><div class="placeholder"><div class="icon">ð</div><p>Generated files will appear here</p></div></div>
+          <div class="tab-content">
+            <div class="preview-tab" id="tab-preview"><div class="placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              <p>Demo preview will appear here</p>
+            </div></div>
+
+            <div class="preview-tab hidden" id="tab-meeting-prep">
+              <div class="fact-check-bar hidden" id="factCheckBar">
+                <button class="fact-check-btn" id="factCheckBtn" onclick="runFactCheck()">Fact-Check with Perplexity</button>
+                <div class="auto-regen-toggle">
+                  <div class="toggle-switch" id="autoRegenToggle" onclick="this.classList.toggle('active')"></div>
+                  <span>Auto-regenerate after check</span>
+                </div>
+                <span id="factCheckStatus" style="font-size:11px;color:var(--text-tertiary);margin-left:auto;"></span>
+              </div>
+              <div class="fact-check-results hidden" id="factCheckResults"></div>
+              <div class="regen-status hidden" id="regenStatus"><div class="spinner" style="width:10px;height:10px;border-width:2px;"></div> Regenerating with fact-checked data...</div>
+              <div id="meetingPrepContent"><div class="placeholder">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <p>Meeting prep document will appear here</p>
+              </div></div>
+            </div>
+
+            <div class="outreach-tab hidden" id="tab-outreach"><div class="placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <p>Outreach messages will appear here</p>
+            </div></div>
+
+            <div class="files-tab hidden" id="tab-files"><div class="placeholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <p>Generated files will appear here</p>
+            </div></div>
+          </div>
         </div>
       </div>
-    </div>
-  </main>
-</div>
-
-<div class="modal-overlay hidden" id="settingsModal">
-  <div class="modal">
-    <h2>Settings</h2>
-    <p class="desc">Configure your API credentials. These are stored locally in your browser.</p>
-    <div class="field"><label>Anthropic API Key</label><input type="password" id="apiKeyInput" placeholder="sk-ant-..."><p class="hint">Used for research, prompt generation, and outreach. Falls back to server env var if not set.</p></div>
-    <div class="field"><label>Netlify Token</label><input type="password" id="netlifyTokenInput" placeholder="nfl_..."><p class="hint">Used for deploying demo sites. Falls back to server env var if not set.</p></div>
-    <div class="field"><label>Perplexity API Key</label><input type="password" id="perplexityKeyInput" placeholder="pplx-..."><p class="hint">Used for fact-checking meeting prep docs with live internet research.</p></div>
-    <div class="modal-actions"><button class="cancel-btn" id="cancelSettings">Cancel</button><button class="save-btn" id="saveSettings">Save Settings</button></div>
+    </main>
   </div>
-</div>
 
-<script>
-const PHASES = [
-  { id:1, label:'Research', icon:'ð' },
-  { id:2, label:'Knowledge Doc', icon:'ð' },
-  { id:3, label:'Sarah Prompt', icon:'âï¸' },
-  { id:4, label:'Demo Build', icon:'ð¨' },
-  { id:5, label:'Deploy', icon:'ð' },
-  { id:6, label:'Meeting Prep', icon:'ð' },
-  { id:7, label:'Outreach', icon:'ð§' },
-  { id:8, label:'Complete', icon:'â' },
-];
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal">
+      <h2>Settings</h2>
+      <p class="desc">Configure your API credentials. Stored locally in your browser.</p>
+      <div class="field"><label>Anthropic API Key</label><input type="password" id="apiKeyInput" placeholder="sk-ant-..."><p class="hint">Used for research, prompt generation, and outreach.</p></div>
+      <div class="field"><label>Netlify Token</label><input type="password" id="netlifyTokenInput" placeholder="nfl_..."><p class="hint">Used for deploying demo sites.</p></div>
+      <div class="field"><label>Perplexity API Key</label><input type="password" id="perplexityKeyInput" placeholder="pplx-..."><p class="hint">Used for fact-checking meeting prep docs with live research.</p></div>
+      <div class="modal-actions"><button class="cancel-btn" id="cancelSettings">Cancel</button><button class="save-btn" id="saveSettings">Save</button></div>
+    </div>
+  </div>
 
-let prospects = JSON.parse(localStorage.getItem('prospects') || '[]');
-let apiKey = localStorage.getItem('apiKey') || '';
-let netlifyToken = localStorage.getItem('netlifyToken') || '';
-let perplexityKey = localStorage.getItem('perplexityKey') || '';
-let isRunning = false;
-let phaseStatuses = {};
-let pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
-let currentProspect = null;
-let failedPhaseId = null;
+  <script>
+    // SVG icon definitions (inline line icons)
+    const ICONS = {
+      search: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+      doc: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+      edit: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+      build: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M12 12h.01"/><path d="M17 12h.01"/><path d="M7 12h.01"/></svg>',
+      deploy: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>',
+      clipboard: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>',
+      mail: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>',
+      check: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+      linkedin: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>',
+      phone: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+      chat: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+      file: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>',
+      folder: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    };
 
-function initPhases() {
-  phaseStatuses = {};
-  PHASES.forEach(p => phaseStatuses[p.id] = 'pending');
-  renderPhases();
-}
+    const PHASES = [
+      { id:1, label:'Research', icon: ICONS.search },
+      { id:2, label:'Knowledge Doc', icon: ICONS.doc },
+      { id:3, label:'Sarah Prompt', icon: ICONS.edit },
+      { id:4, label:'Demo Build', icon: ICONS.build },
+      { id:5, label:'Deploy', icon: ICONS.deploy },
+      { id:6, label:'Meeting Prep', icon: ICONS.clipboard },
+      { id:7, label:'Outreach', icon: ICONS.mail },
+      { id:8, label:'Complete', icon: ICONS.check },
+    ];
 
-function renderPhases() {
-  const c = document.getElementById('phasesContainer');
-  c.innerHTML = '';
-  PHASES.forEach((phase, idx) => {
-    const status = phaseStatuses[phase.id] || 'pending';
-    const div = document.createElement('div');
-    div.className = 'phase' + (status === 'running' ? ' running' : '') + (status === 'done' ? ' done' : '') + (status === 'error' ? ' error' : '');
-    let statusHtml = '';
-    if (status === 'running') statusHtml = '<div class="spinner"></div>';
-    else if (status === 'done') statusHtml = '<span class="checkmark">â</span>';
-    else if (status === 'error') statusHtml = '<span class="error-mark">â</span>';
-    div.innerHTML = '<div class="phase-icon">' + phase.icon + '</div><div class="phase-label">' + phase.label + '</div><div class="phase-status">' + statusHtml + '</div>';
-    c.appendChild(div);
-    if (idx < PHASES.length - 1) { const d = document.createElement('div'); d.className = 'phase-divider'; c.appendChild(d); }
-  });
-}
+    let prospects = JSON.parse(localStorage.getItem('prospects') || '[]');
+    let apiKey = localStorage.getItem('apiKey') || '';
+    let netlifyToken = localStorage.getItem('netlifyToken') || '';
+    let perplexityKey = localStorage.getItem('perplexityKey') || '';
+    let isRunning = false;
+    let phaseStatuses = {};
+    let pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
+    let currentProspect = null;
+    let failedPhaseId = null;
 
-function addLog(message, phaseId) {
-  const container = document.getElementById('logContainer');
-  if (container.querySelector('.empty-log')) container.innerHTML = '';
-  const ts = new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
-  const phase = phaseId ? PHASES.find(p => p.id === phaseId) : null;
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.innerHTML = '<span class="log-time">' + ts + '</span>' + (phase ? '<span class="log-phase">' + phase.label + '</span>' : '') + '<span class="log-message">' + message + '</span>';
-  container.appendChild(entry);
-  entry.scrollIntoView({ behavior:'smooth' });
-}
-
-function showError(msg) {
-  document.getElementById('errorBanner').classList.remove('hidden');
-  document.getElementById('errorText').textContent = msg;
-}
-function hideError() { document.getElementById('errorBanner').classList.add('hidden'); }
-
-function getHeaders() {
-  const h = { 'Content-Type':'application/json' };
-  if (apiKey) h['x-api-key-override'] = apiKey;
-  if (netlifyToken) h['x-netlify-token-override'] = netlifyToken;
-  if (perplexityKey) h['x-perplexity-key-override'] = perplexityKey;
-  return h;
-}
-
-async function apiCall(action, body) {
-  const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action, ...body }) });
-  if (!res.ok) { const err = await res.json().catch(() => ({ error:res.statusText })); throw new Error(err.error || res.statusText); }
-  return res.json();
-}
-
-async function streamApiCall(action, body) {
-  const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action, ...body }) });
-  if (!res.ok) { const err = await res.json().catch(() => ({ error:res.statusText })); throw new Error(err.error || res.statusText); }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let fullText = '';
-  let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          if (data.type === 'chunk') fullText += data.text;
-        } catch {}
-      }
+    function initPhases() {
+      phaseStatuses = {};
+      PHASES.forEach(p => phaseStatuses[p.id] = 'pending');
+      renderPhases();
     }
-  }
-  let html = fullText;
-  if (html.includes('```html')) html = html.replace(/```html\n?/, '').replace(/\n?```/, '');
-  else if (html.includes('```')) html = html.replace(/```\n?/, '').replace(/\n?```/, '');
-  html = html.trim();
-  return { html };
-}
 
-async function streamResearchCall(url) {
-  const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action:'research', url }) });
-  if (!res.ok) { const err = await res.json().catch(() => ({ error:res.statusText })); throw new Error(err.error || res.statusText); }
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let researchData = null;
-  let lastError = null;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6));
-          if (data.type === 'progress') {
-            addLog(data.message, 1);
-          } else if (data.type === 'result') {
-            researchData = data.data;
-          } else if (data.type === 'error') {
-            lastError = data.message;
+    function renderPhases() {
+      const c = document.getElementById('phasesContainer');
+      c.innerHTML = '';
+      PHASES.forEach((phase, idx) => {
+        const status = phaseStatuses[phase.id] || 'pending';
+        const div = document.createElement('div');
+        div.className = 'phase' + (status === 'running' ? ' running' : '') + (status === 'done' ? ' done' : '') + (status === 'error' ? ' error' : '');
+
+        let statusHtml = '';
+        if (status === 'running') statusHtml = '<div class="spinner"></div>';
+        else if (status === 'done') statusHtml = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        else if (status === 'error') statusHtml = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+        div.innerHTML = '<div class="phase-icon">' + phase.icon + '</div><div class="phase-label">' + phase.label + '</div><div class="phase-status">' + statusHtml + '</div>';
+        c.appendChild(div);
+
+        if (idx < PHASES.length - 1) {
+          const d = document.createElement('div');
+          d.className = 'phase-divider';
+          c.appendChild(d);
+        }
+      });
+    }
+
+    function addLog(message, phaseId) {
+      const container = document.getElementById('logContainer');
+      if (container.querySelector('.empty-log')) container.innerHTML = '';
+      const ts = new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+      const phase = phaseId ? PHASES.find(p => p.id === phaseId) : null;
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = '<span class="log-time">' + ts + '</span>' + (phase ? '<span class="log-phase">' + phase.label + '</span>' : '') + '<span class="log-message">' + message + '</span>';
+      container.appendChild(entry);
+      entry.scrollIntoView({ behavior:'smooth' });
+    }
+
+    function showError(msg) {
+      document.getElementById('errorBanner').classList.remove('hidden');
+      document.getElementById('errorText').textContent = msg;
+    }
+
+    function hideError() {
+      document.getElementById('errorBanner').classList.add('hidden');
+    }
+
+    function getHeaders() {
+      const h = { 'Content-Type':'application/json' };
+      if (apiKey) h['x-api-key-override'] = apiKey;
+      if (netlifyToken) h['x-netlify-token-override'] = netlifyToken;
+      if (perplexityKey) h['x-perplexity-key-override'] = perplexityKey;
+      return h;
+    }
+
+    async function apiCall(action, body) {
+      const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action, ...body }) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error:res.statusText }));
+        throw new Error(err.error || res.statusText);
+      }
+      return res.json();
+    }
+
+    async function streamApiCall(action, body) {
+      const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action, ...body }) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error:res.statusText }));
+        throw new Error(err.error || res.statusText);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'chunk') fullText += data.text;
+            } catch {}
           }
-        } catch {}
+        }
+      }
+      let html = fullText;
+      if (html.includes('```html')) html = html.replace(/```html\n?/, '').replace(/\n?```/, '');
+      else if (html.includes('```')) html = html.replace(/```\n?/, '').replace(/\n?```/, '');
+      html = html.trim();
+      return { html };
+    }
+
+    async function streamResearchCall(url) {
+      const res = await fetch('/api/pipeline', { method:'POST', headers:getHeaders(), body:JSON.stringify({ action:'research', url }) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error:res.statusText }));
+        throw new Error(err.error || res.statusText);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let researchData = null;
+      let lastError = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'progress') addLog(data.message, 1);
+              else if (data.type === 'result') researchData = data.data;
+              else if (data.type === 'error') lastError = data.message;
+            } catch {}
+          }
+        }
+      }
+      if (lastError) throw new Error(lastError);
+      if (!researchData) throw new Error('No research data received from server');
+      return researchData;
+    }
+
+    async function launchPipeline() {
+      const url = document.getElementById('urlInput').value.trim();
+      if (!url) { showError('Please enter a valid URL'); return; }
+      try { new URL(url); } catch { showError('Please enter a valid URL'); return; }
+
+      hideError();
+      isRunning = true;
+      document.getElementById('launchBtn').disabled = true;
+      document.getElementById('launchBtn').innerHTML = '<div class="spinner" style="width:12px;height:12px;border-width:2px;"></div> Running...';
+      initPhases();
+      document.getElementById('logContainer').innerHTML = '';
+      pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
+      failedPhaseId = null;
+
+      const prospectName = new URL(url).hostname.replace('www.', '');
+      currentProspect = { id:Date.now(), name:prospectName, url, status:'in-progress', createdAt:new Date().toISOString(), data:{} };
+
+      try {
+        // Phase 1: Deep Research
+        phaseStatuses[1] = 'running'; renderPhases();
+        addLog('Starting deep research on ' + url + '...', 1);
+        addLog('Crawling website pages, searching Google, checking reviews, pricing, staff...', 1);
+
+        const research = await streamResearchCall(url);
+        pipelineData.research = research;
+
+        const peopleCount = research.owners_and_directors ? research.owners_and_directors.length : 0;
+        const competitorCount = research.competitors ? research.competitors.length : 0;
+        const pagesCount = research.website_pages_found ? research.website_pages_found.length : 0;
+        addLog('Deep research complete: ' + research.business_name + ' (' + pagesCount + ' pages, ' + peopleCount + ' people, ' + competitorCount + ' competitors)', 1);
+
+        if (research.google_reviews && research.google_reviews.rating && research.google_reviews.rating !== 'Not found') {
+          addLog('Google Reviews: ' + research.google_reviews.rating + ' stars (' + research.google_reviews.count + ' reviews)', 1);
+        }
+        if (research.confidence_level) addLog('Research confidence: ' + research.confidence_level, 1);
+
+        phaseStatuses[1] = 'done';
+        phaseStatuses[2] = 'done';
+        renderPhases();
+        addLog('Knowledge doc compiled from real sources', 2);
+
+        // Phase 3: Sarah Prompt
+        phaseStatuses[3] = 'running'; renderPhases();
+        addLog('Generating Sarah prompt...', 3);
+        const promptData = await apiCall('generate-prompt', { research });
+        pipelineData.prompt = promptData.prompt;
+        addLog('Sarah prompt generated', 3);
+        phaseStatuses[3] = 'done'; renderPhases();
+
+        // Phase 4: Demo Build
+        phaseStatuses[4] = 'running'; renderPhases();
+        addLog('Building demo site...', 4);
+        const demo = await apiCall('generate-demo', { research, sarahPrompt:pipelineData.prompt });
+        pipelineData.demo = demo;
+        addLog('Demo site built', 4);
+        phaseStatuses[4] = 'done'; renderPhases();
+
+        // Phase 5: Deploy
+        phaseStatuses[5] = 'running'; renderPhases();
+        addLog('Deploying to Netlify...', 5);
+        const siteName = research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-sarah-demo';
+        const deployData = await apiCall('deploy', { html:demo.html, siteName });
+        pipelineData.deployUrl = deployData.url;
+        addLog('Deployed: ' + deployData.url, 5);
+        phaseStatuses[5] = 'done'; renderPhases();
+
+        // Phase 6: Meeting Prep
+        phaseStatuses[6] = 'running'; renderPhases();
+        const contactName = document.getElementById('contactInput').value.trim() || null;
+        const contactRole = document.getElementById('roleInput').value.trim() || null;
+        addLog('Generating meeting prep document...', 6);
+        const meetingPrep = await streamApiCall('meeting-prep', { research, demoUrl:deployData.url, contactName, contactRole });
+        pipelineData.meetingPrep = meetingPrep;
+        addLog('Meeting prep generated', 6);
+
+        addLog('Deploying meeting prep doc...', 6);
+        const prepSiteName = siteName.replace('-sarah-demo', '') + '-meeting-prep';
+        const prepDeploy = await apiCall('deploy', { html:meetingPrep.html, siteName:prepSiteName });
+        pipelineData.meetingPrepUrl = prepDeploy.url;
+        addLog('Meeting prep deployed: ' + prepDeploy.url, 6);
+        phaseStatuses[6] = 'done'; renderPhases();
+
+        // Phase 7: Outreach
+        phaseStatuses[7] = 'running'; renderPhases();
+        addLog('Generating outreach messages...', 7);
+        const outreach = await apiCall('outreach', { research, demoUrl:deployData.url });
+        pipelineData.outreach = outreach;
+        addLog('Outreach messages generated', 7);
+        phaseStatuses[7] = 'done'; renderPhases();
+
+        // Phase 8: Complete
+        phaseStatuses[8] = 'done'; renderPhases();
+        addLog('Pipeline complete!', 8);
+
+        currentProspect.status = 'deployed';
+        currentProspect.data = { ...pipelineData };
+        prospects.unshift(currentProspect);
+        localStorage.setItem('prospects', JSON.stringify(prospects));
+        renderProspects();
+        renderResults();
+
+      } catch (err) {
+        const runningPhase = Object.keys(phaseStatuses).find(k => phaseStatuses[k] === 'running');
+        if (runningPhase) {
+          phaseStatuses[runningPhase] = 'error';
+          failedPhaseId = parseInt(runningPhase);
+          renderPhases();
+        }
+        showError(err.message);
+        addLog('ERROR: ' + err.message, runningPhase ? parseInt(runningPhase) : null);
+      } finally {
+        isRunning = false;
+        document.getElementById('launchBtn').disabled = false;
+        document.getElementById('launchBtn').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg> Launch Pipeline';
       }
     }
-  }
-  if (lastError) throw new Error(lastError);
-  if (!researchData) throw new Error('No research data received from server');
-  return researchData;
-}
 
-async function launchPipeline() {
-  const url = document.getElementById('urlInput').value.trim();
-  if (!url) { showError('Please enter a valid URL'); return; }
-  try { new URL(url); } catch { showError('Please enter a valid URL'); return; }
-
-  hideError();
-  isRunning = true;
-  document.getElementById('launchBtn').disabled = true;
-  document.getElementById('launchBtn').textContent = 'Running...';
-  initPhases();
-  document.getElementById('logContainer').innerHTML = '';
-  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
-  failedPhaseId = null;
-
-  const prospectName = new URL(url).hostname.replace('www.', '');
-  currentProspect = { id:Date.now(), name:prospectName, url, status:'in-progress', createdAt:new Date().toISOString(), data:{} };
-
-  try {
-    // Phase 1: Deep Research (web crawl + Perplexity searches)
-    phaseStatuses[1] = 'running'; renderPhases();
-    addLog('Starting deep research on ' + url + '...', 1);
-    addLog('Crawling website pages, searching Google, checking reviews...', 1);
-    const research = await streamResearchCall(url);
-    pipelineData.research = research;
-    const peopleCount = research.owners_and_directors ? research.owners_and_directors.length : 0;
-    const competitorCount = research.competitors ? research.competitors.length : 0;
-    const pagesCount = research.website_pages_found ? research.website_pages_found.length : 0;
-    addLog('Deep research complete: ' + research.business_name + ' (' + pagesCount + ' pages crawled, ' + peopleCount + ' people found, ' + competitorCount + ' competitors identified)', 1);
-    if (research.google_reviews && research.google_reviews.rating && research.google_reviews.rating !== 'Not found') {
-      addLog('Google Reviews: ' + research.google_reviews.rating + ' stars (' + research.google_reviews.count + ' reviews)', 1);
+    function renderProspects() {
+      const list = document.getElementById('prospectsList');
+      if (prospects.length === 0) { list.innerHTML = '<div class="empty-prospects">No prospects yet</div>'; return; }
+      list.innerHTML = '';
+      prospects.forEach((p) => {
+        const btn = document.createElement('button');
+        btn.className = 'prospect-item' + (currentProspect && currentProspect.id === p.id ? ' active' : '');
+        const date = new Date(p.createdAt).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+        btn.innerHTML = '<div class="prospect-dot ' + p.status + '"></div><div><div style="font-weight:500;font-size:13px">' + p.name + '</div><div style="font-size:11px;color:var(--text-tertiary);margin-top:1px">' + date + '</div></div>';
+        btn.onclick = () => loadProspect(p);
+        list.appendChild(btn);
+      });
     }
-    if (research.confidence_level) {
-      addLog('Research confidence: ' + research.confidence_level, 1);
+
+    function loadProspect(p) {
+      currentProspect = p;
+      document.getElementById('urlInput').value = p.url;
+      pipelineData = p.data || {};
+      PHASES.forEach(phase => phaseStatuses[phase.id] = 'done');
+      renderPhases(); renderProspects(); renderResults();
     }
-    phaseStatuses[1] = 'done'; phaseStatuses[2] = 'done'; renderPhases();
-    addLog('Knowledge doc compiled from real sources', 2);
 
-    // Phase 3: Sarah Prompt
-    phaseStatuses[3] = 'running'; renderPhases();
-    addLog('Generating Sarah prompt...', 3);
-    const promptData = await apiCall('generate-prompt', { research });
-    pipelineData.prompt = promptData.prompt;
-    addLog('Sarah prompt generated', 3);
-    phaseStatuses[3] = 'done'; renderPhases();
+    async function runFactCheck() {
+      if (!pipelineData.meetingPrep || !pipelineData.meetingPrep.html) { showError('No meeting prep document to fact-check'); return; }
+      const btn = document.getElementById('factCheckBtn');
+      const status = document.getElementById('factCheckStatus');
+      btn.disabled = true; btn.textContent = 'Checking...'; btn.classList.add('checking');
+      status.textContent = 'Sending to Perplexity for live research...';
+      try {
+        const result = await apiCall('fact-check', { html: pipelineData.meetingPrep.html, research: pipelineData.research });
+        pipelineData.factCheck = result;
+        renderFactCheckResults(result);
+        status.textContent = 'Fact-check complete';
+        const autoRegen = document.getElementById('autoRegenToggle').classList.contains('active');
+        if (autoRegen) await regenerateWithFactCheck();
+      } catch (err) {
+        showError('Fact-check failed: ' + err.message);
+        status.textContent = 'Failed';
+      } finally {
+        btn.disabled = false; btn.textContent = 'Fact-Check with Perplexity'; btn.classList.remove('checking');
+      }
+    }
 
-    // Phase 4: Demo Build
-    phaseStatuses[4] = 'running'; renderPhases();
-    addLog('Building demo site...', 4);
-    const demo = await apiCall('generate-demo', { research, sarahPrompt:pipelineData.prompt });
-    pipelineData.demo = demo;
-    addLog('Demo site built successfully', 4);
-    phaseStatuses[4] = 'done'; renderPhases();
+    async function regenerateWithFactCheck() {
+      if (!pipelineData.factCheck) return;
+      const regenStatus = document.getElementById('regenStatus');
+      regenStatus.classList.remove('hidden');
+      try {
+        const contactName = document.getElementById('contactInput').value.trim() || null;
+        const contactRole = document.getElementById('roleInput').value.trim() || null;
+        const result = await streamApiCall('regenerate-prep', {
+          research: pipelineData.research, demoUrl: pipelineData.deployUrl,
+          contactName, contactRole,
+          factCheckResults: pipelineData.factCheck.parsed || pipelineData.factCheck.raw,
+          originalHtml: pipelineData.meetingPrep.html
+        });
+        pipelineData.meetingPrep = result;
+        addLog('Meeting prep regenerated with fact-checked data', 6);
+        const siteName = pipelineData.research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-meeting-prep';
+        const deployResult = await apiCall('deploy', { html: result.html, siteName });
+        pipelineData.meetingPrepUrl = deployResult.url;
+        addLog('Updated meeting prep deployed: ' + deployResult.url, 6);
+        renderMeetingPrepTab();
+      } catch (err) { showError('Regeneration failed: ' + err.message); }
+      finally { regenStatus.classList.add('hidden'); }
+    }
 
-    // Phase 5: Deploy
-    phaseStatuses[5] = 'running'; renderPhases();
-    addLog('Deploying to Netlify...', 5);
-    const siteName = research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-sarah-demo';
-    const deployData = await apiCall('deploy', { html:demo.html, siteName });
-    pipelineData.deployUrl = deployData.url;
-    addLog('Deployed to ' + deployData.url, 5);
-    phaseStatuses[5] = 'done'; renderPhases();
+    function renderFactCheckResults(result) {
+      const container = document.getElementById('factCheckResults');
+      container.classList.remove('hidden');
+      if (!result.parsed) {
+        container.innerHTML = '<div class="fact-result-section"><h5>Raw Results</h5><div class="fact-result-item"><pre style="white-space:pre-wrap;font-size:10px;margin:0;">' + (result.raw || 'No results').replace(/</g, '&lt;') + '</pre></div></div>';
+        return;
+      }
+      const p = result.parsed;
+      let html = '';
+      if (p.overall_accuracy) {
+        html += '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:var(--text-tertiary);">Overall accuracy:</span><span class="accuracy-badge ' + p.overall_accuracy + '">' + p.overall_accuracy + '</span></div>';
+      }
+      if (p.summary) html += '<div class="fact-result-section"><h5>Summary</h5><div class="fact-result-item">' + p.summary + '</div></div>';
+      if (p.corrections && p.corrections.length > 0) {
+        html += '<div class="fact-result-section"><h5>Corrections Needed</h5>';
+        p.corrections.forEach(c => {
+          html += '<div class="fact-result-item correction"><strong>Claim:</strong> ' + (c.claim || '').replace(/</g, '&lt;') + '<br><strong>Reality:</strong> ' + (c.reality || '').replace(/</g, '&lt;') + (c.source ? '<br><em style="color:var(--text-tertiary)">Source: ' + c.source.replace(/</g, '&lt;') + '</em>' : '') + '</div>';
+        });
+        html += '</div>';
+      }
+      if (p.new_information && p.new_information.length > 0) {
+        html += '<div class="fact-result-section"><h5>New Information Found</h5>';
+        p.new_information.forEach(n => {
+          html += '<div class="fact-result-item new-info"><strong>' + (n.topic || '').replace(/</g, '&lt;') + ':</strong> ' + (n.detail || '').replace(/</g, '&lt;') + (n.source ? '<br><em style="color:var(--text-tertiary)">Source: ' + n.source.replace(/</g, '&lt;') + '</em>' : '') + '</div>';
+        });
+        html += '</div>';
+      }
+      if (p.missing_competitors && p.missing_competitors.length > 0) {
+        html += '<div class="fact-result-section"><h5>Competitors Found</h5>';
+        p.missing_competitors.forEach(c => {
+          html += '<div class="fact-result-item new-info"><strong>' + (c.name || '').replace(/</g, '&lt;') + '</strong>' + (c.url ? ' - <a href="' + c.url + '" target="_blank">' + c.url + '</a>' : '') + (c.notes ? '<br>' + c.notes.replace(/</g, '&lt;') : '') + '</div>';
+        });
+        html += '</div>';
+      }
+      if (p.verified_facts && p.verified_facts.length > 0) {
+        html += '<div class="fact-result-section"><h5>Verified Facts (' + p.verified_facts.length + ')</h5>';
+        p.verified_facts.forEach(f => {
+          html += '<div class="fact-result-item" style="border-left-color:var(--success);">' + (f || '').replace(/</g, '&lt;') + '</div>';
+        });
+        html += '</div>';
+      }
+      if (!document.getElementById('autoRegenToggle').classList.contains('active')) {
+        html += '<div style="padding:12px 0;"><button class="fact-check-btn" onclick="regenerateWithFactCheck()" style="background:linear-gradient(135deg,var(--success),#059669);">Regenerate Document with These Findings</button></div>';
+      }
+      container.innerHTML = html;
+    }
 
-    // Phase 6: Meeting Prep
-    phaseStatuses[6] = 'running'; renderPhases();
-    const contactName = document.getElementById('contactInput').value.trim() || null;
-    const contactRole = document.getElementById('roleInput').value.trim() || null;
-    addLog('Generating meeting prep document...', 6);
-    const meetingPrep = await streamApiCall('meeting-prep', { research, demoUrl:deployData.url, contactName, contactRole });
-    pipelineData.meetingPrep = meetingPrep;
-    addLog('Meeting prep document generated', 6);
+    function renderMeetingPrepTab() {
+      const content = document.getElementById('meetingPrepContent');
+      if (pipelineData.meetingPrepUrl) {
+        content.innerHTML = '<div class="preview-link"><a href="' + pipelineData.meetingPrepUrl + '" target="_blank">' + pipelineData.meetingPrepUrl + '</a></div><iframe src="' + pipelineData.meetingPrepUrl + '" class="preview-iframe" title="Meeting Prep"></iframe>';
+      }
+      if (pipelineData.meetingPrep) document.getElementById('factCheckBar').classList.remove('hidden');
+    }
 
-    // Deploy meeting prep to Netlify
-    addLog('Deploying meeting prep doc...', 6);
-    const prepSiteName = siteName.replace('-sarah-demo', '') + '-meeting-prep';
-    const prepDeploy = await apiCall('deploy', { html:meetingPrep.html, siteName:prepSiteName });
-    pipelineData.meetingPrepUrl = prepDeploy.url;
-    addLog('Meeting prep deployed to ' + prepDeploy.url, 6);
-    phaseStatuses[6] = 'done'; renderPhases();
+    function renderResults() {
+      const previewTab = document.getElementById('tab-preview');
+      if (pipelineData.deployUrl) {
+        previewTab.innerHTML = '<div class="preview-link"><a href="' + pipelineData.deployUrl + '" target="_blank">' + pipelineData.deployUrl + '</a></div><iframe src="' + pipelineData.deployUrl + '" class="preview-iframe" title="Demo Preview"></iframe>';
+      }
+      renderMeetingPrepTab();
+      const outreachTab = document.getElementById('tab-outreach');
+      if (pipelineData.outreach) {
+        let html = '';
+        const o = pipelineData.outreach;
+        if (o.email) html += makeOutreachCard('Email', ICONS.mail, typeof o.email === 'string' ? o.email : o.email.subject + '\n\n' + o.email.body);
+        if (o.linkedin) html += makeOutreachCard('LinkedIn', ICONS.linkedin, o.linkedin);
+        if (o.voicemail) html += makeOutreachCard('Voicemail Script', ICONS.phone, o.voicemail);
+        if (o.sms) html += makeOutreachCard('SMS', ICONS.chat, o.sms);
+        outreachTab.innerHTML = html;
+      }
+      const filesTab = document.getElementById('tab-files');
+      if (pipelineData.research || pipelineData.prompt || pipelineData.demo) {
+        let html = '';
+        if (pipelineData.research) html += makeFileItem('research.json', JSON.stringify(pipelineData.research, null, 2));
+        if (pipelineData.prompt) html += makeFileItem('sarah-prompt.txt', pipelineData.prompt);
+        if (pipelineData.demo) html += makeFileItem('demo.html', typeof pipelineData.demo === 'string' ? pipelineData.demo : JSON.stringify(pipelineData.demo, null, 2));
+        if (pipelineData.meetingPrep) html += makeFileItem('meeting-prep.html', typeof pipelineData.meetingPrep === 'string' ? pipelineData.meetingPrep : (pipelineData.meetingPrep.html || JSON.stringify(pipelineData.meetingPrep, null, 2)));
+        if (pipelineData.outreach) html += makeFileItem('outreach.json', JSON.stringify(pipelineData.outreach, null, 2));
+        filesTab.innerHTML = html;
+      }
+    }
 
-    // Phase 7: Outreach
-    phaseStatuses[7] = 'running'; renderPhases();
-    addLog('Generating outreach messages...', 7);
-    const outreach = await apiCall('outreach', { research, demoUrl:deployData.url });
-    pipelineData.outreach = outreach;
-    addLog('Outreach messages generated', 7);
-    phaseStatuses[7] = 'done'; renderPhases();
+    function makeOutreachCard(title, icon, content) {
+      const escaped = content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div class="outreach-card"><div class="card-header"><h4>' + icon + ' ' + title + '</h4><button class="copy-btn" onclick="copyText(this, `' + btoa(unescape(encodeURIComponent(content))) + '`)">Copy</button></div><div class="card-content"><pre>' + escaped + '</pre></div></div>';
+    }
 
-    // Phase 8: Complete
-    phaseStatuses[8] = 'done'; renderPhases();
-    addLog('Pipeline complete!', 8);
+    function makeFileItem(name, content) {
+      const id = 'file-' + name.replace(/[^a-z0-9]/gi, '-');
+      const escaped = (content || '').substring(0, 500).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div class="file-item"><button class="file-btn" onclick="toggleFile(\'' + id + '\')">' + ICONS.file + ' <span style="flex:1;font-family:\'JetBrains Mono\',monospace;font-size:12px">' + name + '</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="file-content hidden" id="' + id + '"><pre>' + escaped + (content && content.length > 500 ? '...' : '') + '</pre></div></div>';
+    }
 
-    currentProspect.status = 'deployed';
-    currentProspect.data = { ...pipelineData };
-    prospects.unshift(currentProspect);
-    localStorage.setItem('prospects', JSON.stringify(prospects));
+    function toggleFile(id) { document.getElementById(id).classList.toggle('hidden'); }
+
+    function copyText(btn, b64) {
+      const text = decodeURIComponent(escape(atob(b64)));
+      navigator.clipboard.writeText(text);
+      btn.textContent = 'Copied';
+      setTimeout(() => btn.textContent = 'Copy', 2000);
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelectorAll('.tab-content > div').forEach(d => d.classList.add('hidden'));
+        document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
+      });
+    });
+
+    // Event listeners
+    document.getElementById('launchBtn').addEventListener('click', launchPipeline);
+    document.getElementById('urlInput').addEventListener('keypress', e => { if (e.key === 'Enter' && !isRunning) launchPipeline(); });
+
+    document.getElementById('newPipelineBtn').addEventListener('click', () => {
+      document.getElementById('urlInput').value = '';
+      document.getElementById('contactInput').value = '';
+      document.getElementById('roleInput').value = '';
+      currentProspect = null;
+      pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
+      initPhases();
+      document.getElementById('logContainer').innerHTML = '<div class="empty-log"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-tertiary)"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>No activity yet. Launch a pipeline to get started.</div>';
+      hideError();
+      document.getElementById('tab-preview').innerHTML = '<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><p>Demo preview will appear here</p></div>';
+      document.getElementById('meetingPrepContent').innerHTML = '<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><p>Meeting prep document will appear here</p></div>';
+      document.getElementById('factCheckBar').classList.add('hidden');
+      document.getElementById('factCheckResults').classList.add('hidden');
+      document.getElementById('factCheckResults').innerHTML = '';
+      document.getElementById('regenStatus').classList.add('hidden');
+      document.getElementById('tab-outreach').innerHTML = '<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg><p>Outreach messages will appear here</p></div>';
+      document.getElementById('tab-files').innerHTML = '<div class="placeholder"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><p>Generated files will appear here</p></div>';
+      renderProspects();
+    });
+
+    document.getElementById('settingsBtn').addEventListener('click', () => {
+      document.getElementById('apiKeyInput').value = apiKey;
+      document.getElementById('netlifyTokenInput').value = netlifyToken;
+      document.getElementById('perplexityKeyInput').value = perplexityKey;
+      document.getElementById('settingsModal').classList.remove('hidden');
+    });
+    document.getElementById('cancelSettings').addEventListener('click', () => document.getElementById('settingsModal').classList.add('hidden'));
+    document.getElementById('settingsModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
+    document.getElementById('saveSettings').addEventListener('click', () => {
+      apiKey = document.getElementById('apiKeyInput').value;
+      netlifyToken = document.getElementById('netlifyTokenInput').value;
+      perplexityKey = document.getElementById('perplexityKeyInput').value;
+      localStorage.setItem('apiKey', apiKey);
+      localStorage.setItem('netlifyToken', netlifyToken);
+      localStorage.setItem('perplexityKey', perplexityKey);
+      document.getElementById('settingsModal').classList.add('hidden');
+    });
+
+    document.getElementById('retryBtn').addEventListener('click', () => { if (failedPhaseId && !isRunning) launchPipeline(); });
+
+    // Mobile sidebar
+    const hamburger = document.getElementById('hamburgerBtn');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    function toggleSidebar() {
+      sidebar.classList.toggle('open');
+      hamburger.classList.toggle('active');
+      sidebarOverlay.classList.toggle('visible');
+    }
+    hamburger.addEventListener('click', toggleSidebar);
+    sidebarOverlay.addEventListener('click', toggleSidebar);
+
+    const origLoadProspect = loadProspect;
+    loadProspect = function(p) {
+      origLoadProspect(p);
+      if (window.innerWidth <= 900 && sidebar.classList.contains('open')) toggleSidebar();
+    };
+
+    function toggleActivityLog() {
+      const container = document.getElementById('logContainer');
+      const btn = document.getElementById('activityToggle');
+      container.classList.toggle('expanded');
+      btn.textContent = container.classList.contains('expanded') ? 'Show less' : 'Show all entries';
+    }
+
+    // Init
+    initPhases();
     renderProspects();
-    renderResults();
-
-  } catch (err) {
-    const runningPhase = Object.keys(phaseStatuses).find(k => phaseStatuses[k] === 'running');
-    if (runningPhase) { phaseStatuses[runningPhase] = 'error'; failedPhaseId = parseInt(runningPhase); renderPhases(); }
-    showError(err.message);
-    addLog('ERROR: ' + err.message, runningPhase ? parseInt(runningPhase) : null);
-  } finally {
-    isRunning = false;
-    document.getElementById('launchBtn').disabled = false;
-    document.getElementById('launchBtn').textContent = 'Launch Pipeline';
-  }
-}
-
-function renderProspects() {
-  const list = document.getElementById('prospectsList');
-  if (prospects.length === 0) { list.innerHTML = '<div class="empty-prospects">No prospects yet</div>'; return; }
-  list.innerHTML = '';
-  prospects.forEach((p, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'prospect-item' + (currentProspect && currentProspect.id === p.id ? ' active' : '');
-    const date = new Date(p.createdAt).toLocaleDateString('en-US', { month:'short', day:'numeric' });
-    btn.innerHTML = '<div class="prospect-dot ' + p.status + '"></div><div><div style="font-weight:500">' + p.name + '</div><div style="font-size:12px;color:var(--text-muted);margin-top:2px">' + date + '</div></div>';
-    btn.onclick = () => loadProspect(p);
-    list.appendChild(btn);
-  });
-}
-
-function loadProspect(p) {
-  currentProspect = p;
-  document.getElementById('urlInput').value = p.url;
-  pipelineData = p.data || {};
-  PHASES.forEach(phase => phaseStatuses[phase.id] = 'done');
-  renderPhases();
-  renderProspects();
-  renderResults();
-}
-
-async function runFactCheck() {
-  if (!pipelineData.meetingPrep || !pipelineData.meetingPrep.html) {
-    showError('No meeting prep document to fact-check');
-    return;
-  }
-
-  const btn = document.getElementById('factCheckBtn');
-  const status = document.getElementById('factCheckStatus');
-  btn.disabled = true;
-  btn.textContent = 'Checking...';
-  btn.classList.add('checking');
-  status.textContent = 'Sending to Perplexity for live research...';
-
-  try {
-    const result = await apiCall('fact-check', {
-      html: pipelineData.meetingPrep.html,
-      research: pipelineData.research
-    });
-
-    pipelineData.factCheck = result;
-    renderFactCheckResults(result);
-    status.textContent = 'Fact-check complete';
-
-    // Check if auto-regenerate is on
-    const autoRegen = document.getElementById('autoRegenToggle').classList.contains('active');
-    if (autoRegen) {
-      await regenerateWithFactCheck();
-    }
-  } catch (err) {
-    showError('Fact-check failed: ' + err.message);
-    status.textContent = 'Failed';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Fact-Check with Perplexity';
-    btn.classList.remove('checking');
-  }
-}
-
-async function regenerateWithFactCheck() {
-  if (!pipelineData.factCheck) return;
-
-  const regenStatus = document.getElementById('regenStatus');
-  regenStatus.classList.remove('hidden');
-
-  try {
-    const contactName = document.getElementById('contactInput').value.trim() || null;
-    const contactRole = document.getElementById('roleInput').value.trim() || null;
-
-    const result = await streamApiCall('regenerate-prep', {
-      research: pipelineData.research,
-      demoUrl: pipelineData.deployUrl,
-      contactName,
-      contactRole,
-      factCheckResults: pipelineData.factCheck.parsed || pipelineData.factCheck.raw,
-      originalHtml: pipelineData.meetingPrep.html
-    });
-
-    pipelineData.meetingPrep = result;
-    addLog('Meeting prep regenerated with fact-checked data', 6);
-
-    // Redeploy
-    const siteName = pipelineData.research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-meeting-prep';
-    const deployResult = await apiCall('deploy', { html: result.html, siteName });
-    pipelineData.meetingPrepUrl = deployResult.url;
-    addLog('Updated meeting prep deployed to ' + deployResult.url, 6);
-
-    renderMeetingPrepTab();
-  } catch (err) {
-    showError('Regeneration failed: ' + err.message);
-  } finally {
-    regenStatus.classList.add('hidden');
-  }
-}
-
-function renderFactCheckResults(result) {
-  const container = document.getElementById('factCheckResults');
-  container.classList.remove('hidden');
-
-  if (!result.parsed) {
-    container.innerHTML = '<div class="fact-result-section"><h5>Raw Results</h5><div class="fact-result-item"><pre style="white-space:pre-wrap;font-size:11px;margin:0;">' + (result.raw || 'No results').replace(/</g, '&lt;') + '</pre></div></div>';
-    return;
-  }
-
-  const p = result.parsed;
-  let html = '';
-
-  // Accuracy badge
-  if (p.overall_accuracy) {
-    html += '<div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;"><span style="font-size:12px;color:var(--text-muted);">Overall accuracy:</span><span class="accuracy-badge ' + p.overall_accuracy + '">' + p.overall_accuracy + '</span></div>';
-  }
-
-  // Summary
-  if (p.summary) {
-    html += '<div class="fact-result-section"><h5>Summary</h5><div class="fact-result-item">' + p.summary + '</div></div>';
-  }
-
-  // Corrections
-  if (p.corrections && p.corrections.length > 0) {
-    html += '<div class="fact-result-section"><h5>Corrections Needed</h5>';
-    p.corrections.forEach(c => {
-      html += '<div class="fact-result-item correction"><strong>Claim:</strong> ' + (c.claim || '').replace(/</g, '&lt;') + '<br><strong>Reality:</strong> ' + (c.reality || '').replace(/</g, '&lt;') + (c.source ? '<br><em style="color:var(--text-muted)">Source: ' + c.source.replace(/</g, '&lt;') + '</em>' : '') + '</div>';
-    });
-    html += '</div>';
-  }
-
-  // New information
-  if (p.new_information && p.new_information.length > 0) {
-    html += '<div class="fact-result-section"><h5>New Information Found</h5>';
-    p.new_information.forEach(n => {
-      html += '<div class="fact-result-item new-info"><strong>' + (n.topic || '').replace(/</g, '&lt;') + ':</strong> ' + (n.detail || '').replace(/</g, '&lt;') + (n.source ? '<br><em style="color:var(--text-muted)">Source: ' + n.source.replace(/</g, '&lt;') + '</em>' : '') + '</div>';
-    });
-    html += '</div>';
-  }
-
-  // Competitors
-  if (p.missing_competitors && p.missing_competitors.length > 0) {
-    html += '<div class="fact-result-section"><h5>Competitors Found</h5>';
-    p.missing_competitors.forEach(c => {
-      html += '<div class="fact-result-item new-info"><strong>' + (c.name || '').replace(/</g, '&lt;') + '</strong>' + (c.url ? ' - <a href="' + c.url + '" target="_blank">' + c.url + '</a>' : '') + (c.notes ? '<br>' + c.notes.replace(/</g, '&lt;') : '') + '</div>';
-    });
-    html += '</div>';
-  }
-
-  // Verified facts
-  if (p.verified_facts && p.verified_facts.length > 0) {
-    html += '<div class="fact-result-section"><h5>Verified Facts (' + p.verified_facts.length + ')</h5>';
-    p.verified_facts.forEach(f => {
-      html += '<div class="fact-result-item" style="border-left-color:var(--success);">â ' + (f || '').replace(/</g, '&lt;') + '</div>';
-    });
-    html += '</div>';
-  }
-
-  // Regenerate button if not auto
-  if (!document.getElementById('autoRegenToggle').classList.contains('active')) {
-    html += '<div style="padding:12px 0;"><button class="fact-check-btn" onclick="regenerateWithFactCheck()" style="background:linear-gradient(135deg,var(--success),#059669);">Regenerate Document with These Findings</button></div>';
-  }
-
-  container.innerHTML = html;
-}
-
-function renderMeetingPrepTab() {
-  const content = document.getElementById('meetingPrepContent');
-  if (pipelineData.meetingPrepUrl) {
-    content.innerHTML = '<div class="preview-link"><a href="' + pipelineData.meetingPrepUrl + '" target="_blank">View live: ' + pipelineData.meetingPrepUrl + '</a></div><iframe src="' + pipelineData.meetingPrepUrl + '" class="preview-iframe" title="Meeting Prep"></iframe>';
-  }
-  // Show fact-check bar if meeting prep exists
-  if (pipelineData.meetingPrep) {
-    document.getElementById('factCheckBar').classList.remove('hidden');
-  }
-}
-
-function renderResults() {
-  // Preview tab
-  const previewTab = document.getElementById('tab-preview');
-  if (pipelineData.deployUrl) {
-    previewTab.innerHTML = '<div class="preview-link"><a href="' + pipelineData.deployUrl + '" target="_blank">View live: ' + pipelineData.deployUrl + '</a></div><iframe src="' + pipelineData.deployUrl + '" class="preview-iframe" title="Demo Preview"></iframe>';
-  }
-
-  // Meeting Prep tab
-  renderMeetingPrepTab();
-
-  // Outreach tab
-  const outreachTab = document.getElementById('tab-outreach');
-  if (pipelineData.outreach) {
-    let html = '';
-    const o = pipelineData.outreach;
-    if (o.email) html += makeOutreachCard('Email', 'ð§', typeof o.email === 'string' ? o.email : o.email.subject + '\n\n' + o.email.body);
-    if (o.linkedin) html += makeOutreachCard('LinkedIn', 'ð¼', o.linkedin);
-    if (o.voicemail) html += makeOutreachCard('Voicemail Script', 'ð±', o.voicemail);
-    if (o.sms) html += makeOutreachCard('SMS', 'ð¬', o.sms);
-    outreachTab.innerHTML = html;
-  }
-
-  // Files tab
-  const filesTab = document.getElementById('tab-files');
-  if (pipelineData.research || pipelineData.prompt || pipelineData.demo) {
-    let html = '';
-    if (pipelineData.research) html += makeFileItem('research.json', 'ð', JSON.stringify(pipelineData.research, null, 2));
-    if (pipelineData.prompt) html += makeFileItem('sarah-prompt.txt', 'âï¸', pipelineData.prompt);
-    if (pipelineData.demo) html += makeFileItem('demo.html', 'ð', typeof pipelineData.demo === 'string' ? pipelineData.demo : JSON.stringify(pipelineData.demo, null, 2));
-    if (pipelineData.meetingPrep) html += makeFileItem('meeting-prep.html', 'ð', typeof pipelineData.meetingPrep === 'string' ? pipelineData.meetingPrep : (pipelineData.meetingPrep.html || JSON.stringify(pipelineData.meetingPrep, null, 2)));
-    if (pipelineData.outreach) html += makeFileItem('outreach.json', 'ð§', JSON.stringify(pipelineData.outreach, null, 2));
-    filesTab.innerHTML = html;
-  }
-}
-
-function makeOutreachCard(title, icon, content) {
-  const escaped = content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return '<div class="outreach-card"><div class="card-header"><h4>' + icon + ' ' + title + '</h4><button class="copy-btn" onclick="copyText(this, `' + btoa(unescape(encodeURIComponent(content))) + '`)">Copy</button></div><div class="card-content"><pre>' + escaped + '</pre></div></div>';
-}
-
-function makeFileItem(name, icon, content) {
-  const id = 'file-' + name.replace(/[^a-z0-9]/gi, '-');
-  const escaped = (content || '').substring(0, 500).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  return '<div class="file-item"><button class="file-btn" onclick="toggleFile(\'' + id + '\')">' + icon + ' <span style="flex:1;font-family:monospace">' + name + '</span> <span style="color:var(--text-muted);font-size:10px">â¶</span></button><div class="file-content hidden" id="' + id + '"><pre>' + escaped + (content && content.length > 500 ? '...' : '') + '</pre></div></div>';
-}
-
-function toggleFile(id) { document.getElementById(id).classList.toggle('hidden'); }
-
-function copyText(btn, b64) {
-  const text = decodeURIComponent(escape(atob(b64)));
-  navigator.clipboard.writeText(text);
-  btn.textContent = 'â Copied';
-  setTimeout(() => btn.textContent = 'Copy', 2000);
-}
-
-// Tab switching
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    document.querySelectorAll('.tab-content > div').forEach(d => d.classList.add('hidden'));
-    document.getElementById('tab-' + tab.dataset.tab).classList.remove('hidden');
-  });
-});
-
-// Event listeners
-document.getElementById('launchBtn').addEventListener('click', launchPipeline);
-document.getElementById('urlInput').addEventListener('keypress', e => { if (e.key === 'Enter' && !isRunning) launchPipeline(); });
-document.getElementById('newPipelineBtn').addEventListener('click', () => {
-  document.getElementById('urlInput').value = '';
-  document.getElementById('contactInput').value = '';
-  document.getElementById('roleInput').value = '';
-  currentProspect = null;
-  pipelineData = { research:null, prompt:null, demo:null, deployUrl:null, meetingPrep:null, meetingPrepUrl:null, factCheck:null, outreach:null };
-  initPhases();
-  document.getElementById('logContainer').innerHTML = '<div class="empty-log">No activity yet. Launch a pipeline to get started.</div>';
-  hideError();
-  document.getElementById('tab-preview').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Demo preview will appear here</p></div>';
-  document.getElementById('meetingPrepContent').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Meeting prep document will appear here</p></div>';
-  document.getElementById('factCheckBar').classList.add('hidden');
-  document.getElementById('factCheckResults').classList.add('hidden');
-  document.getElementById('factCheckResults').innerHTML = '';
-  document.getElementById('regenStatus').classList.add('hidden');
-  document.getElementById('tab-outreach').innerHTML = '<div class="placeholder"><div class="icon">ð§</div><p>Outreach messages will appear here</p></div>';
-  document.getElementById('tab-files').innerHTML = '<div class="placeholder"><div class="icon">ð</div><p>Generated files will appear here</p></div>';
-  renderProspects();
-});
-
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('apiKeyInput').value = apiKey;
-  document.getElementById('netlifyTokenInput').value = netlifyToken;
-  document.getElementById('perplexityKeyInput').value = perplexityKey;
-  document.getElementById('settingsModal').classList.remove('hidden');
-});
-document.getElementById('cancelSettings').addEventListener('click', () => document.getElementById('settingsModal').classList.add('hidden'));
-document.getElementById('settingsModal').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden'); });
-document.getElementById('saveSettings').addEventListener('click', () => {
-  apiKey = document.getElementById('apiKeyInput').value;
-  netlifyToken = document.getElementById('netlifyTokenInput').value;
-  perplexityKey = document.getElementById('perplexityKeyInput').value;
-  localStorage.setItem('apiKey', apiKey);
-  localStorage.setItem('netlifyToken', netlifyToken);
-  localStorage.setItem('perplexityKey', perplexityKey);
-  document.getElementById('settingsModal').classList.add('hidden');
-});
-document.getElementById('retryBtn').addEventListener('click', () => { if (failedPhaseId && !isRunning) launchPipeline(); });
-
-// Mobile sidebar toggle
-const hamburger = document.getElementById('hamburgerBtn');
-const sidebar = document.getElementById('sidebar');
-const sidebarOverlay = document.getElementById('sidebarOverlay');
-
-function toggleSidebar() {
-  sidebar.classList.toggle('open');
-  hamburger.classList.toggle('active');
-  sidebarOverlay.classList.toggle('visible');
-}
-hamburger.addEventListener('click', toggleSidebar);
-sidebarOverlay.addEventListener('click', toggleSidebar);
-
-// Close sidebar when selecting a prospect on mobile
-const origLoadProspect = loadProspect;
-loadProspect = function(p) {
-  origLoadProspect(p);
-  if (window.innerWidth <= 900 && sidebar.classList.contains('open')) toggleSidebar();
-};
-
-// Activity log toggle for mobile
-function toggleActivityLog() {
-  const container = document.getElementById('logContainer');
-  const btn = document.getElementById('activityToggle');
-  container.classList.toggle('expanded');
-  btn.textContent = container.classList.contains('expanded') ? 'Show less' : 'Show all entries';
-}
-
-// Init
-initPhases();
-renderProspects();
-</script>
+  </script>
 </body>
 </html>
