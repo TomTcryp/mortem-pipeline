@@ -169,6 +169,63 @@ async function perplexitySearch(apiKey, query, maxTokens = 2500) {
   }
 }
 
+// ── Ground-Truth NAP Verification (runs BEFORE synthesis to prevent hallucination) ──
+async function verifyGroundTruth(perplexityKey, businessUrl, websiteTitleHint) {
+  if (!perplexityKey) return null;
+
+  const prompt = `You are a verification agent. Return ONLY verified, current facts about the business at this exact URL: ${businessUrl}
+${websiteTitleHint ? 'Website title suggests the business name is: ' + websiteTitleHint : ''}
+
+CRITICAL RULES:
+1. Visit the actual website and read the footer, contact page, and Google Business Profile.
+2. Return ONLY information you can directly verify from the website, official directories, or Google Business Profile.
+3. Do NOT infer location from area code alone. Do NOT guess. If something cannot be directly verified, return the string "UNVERIFIED" for that field.
+4. If the domain or phone appears to match multiple businesses, prioritize what is shown on THIS exact website.
+5. If there are multiple locations, list ALL of them in all_locations.
+
+Return a JSON object with exactly these fields and nothing else:
+{
+  "exact_business_name": "the exact trading name as shown on their website homepage or footer",
+  "street_address": "the exact primary street address",
+  "city": "city name",
+  "state": "2-letter state code",
+  "zip": "zip/postal code",
+  "country": "2-letter country code",
+  "phone": "primary phone in exact format as shown",
+  "email": "primary email if shown",
+  "website_canonical": "the canonical URL with https://",
+  "all_locations": [
+    {"name": "location name if multi-location", "address": "full street address", "city_state_zip": "city state zip", "phone": "phone for this location"}
+  ],
+  "verification_sources": ["source URL 1", "source URL 2"],
+  "confidence": "high/medium/low"
+}
+
+Return ONLY the JSON object, nothing else. No markdown, no code blocks, no commentary.`;
+
+  try {
+    const res = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${perplexityKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [
+          { role: 'system', content: 'You are a precise fact verification agent. You only return verified facts with source URLs. You never guess. You never infer location from phone area codes alone.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 1500,
+        temperature: 0,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const match = content.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try { return JSON.parse(match[0]); } catch { return null; }
+  } catch { return null; }
+}
+
 // ── Main Research Handler (Enterprise-grade SSE streaming) ──
 
 async function handleResearch(req, res) {
@@ -316,16 +373,35 @@ async function handleResearch(req, res) {
       }
     }
 
+    // ── STEP 1.5: GROUND-TRUTH NAP VERIFICATION (prevents location hallucinations) ──
+    let groundTruth = null;
+    if (perplexityKey) {
+      send('progress', { phase: 'verify', message: 'Locking ground-truth business name, address, and phone before synthesis...' });
+      groundTruth = await verifyGroundTruth(perplexityKey, baseUrl, businessNameHint);
+      if (groundTruth && groundTruth.exact_business_name && groundTruth.exact_business_name !== 'UNVERIFIED') {
+        const loc = [groundTruth.city, groundTruth.state].filter(v => v && v !== 'UNVERIFIED').join(', ') || 'location unverified';
+        send('progress', { phase: 'verify', message: `Ground truth locked: ${groundTruth.exact_business_name} in ${loc} (confidence: ${groundTruth.confidence || 'unknown'})` });
+        // Use the verified name for downstream searches so Perplexity doesn't search the wrong entity
+        businessNameHint = groundTruth.exact_business_name;
+      } else {
+        send('progress', { phase: 'verify', message: 'Ground truth verification returned no high-confidence NAP. Proceeding with website data only.' });
+      }
+    }
+
     // ── STEP 2: 7 parallel Perplexity deep searches ──
-    send('progress', { phase: 'search', message: `Running 7 deep research searches for "${businessNameHint}"...` });
+    const locationContext = groundTruth && groundTruth.city && groundTruth.state && groundTruth.city !== 'UNVERIFIED'
+      ? ` located at ${groundTruth.street_address || ''}, ${groundTruth.city}, ${groundTruth.state} ${groundTruth.zip || ''}`
+      : '';
+    send('progress', { phase: 'search', message: `Running 7 deep research searches for "${businessNameHint}"${locationContext}...` });
 
     let searchResults = { business: null, reviews: null, people: null, competitors: null, news: null, pricing: null, digital: null };
 
     if (perplexityKey) {
+      const bizRef = `"${businessNameHint}" funeral home${locationContext} (website: ${url})`;
       const searches = await Promise.allSettled([
         // Search 1: Business deep dive
         perplexitySearch(perplexityKey,
-          `Conduct an exhaustive investigation of "${businessNameHint}" funeral home (website: ${url}). I need VERIFIED facts only.
+          `Conduct an exhaustive investigation of ${bizRef}. I need VERIFIED facts only. IMPORTANT: Do NOT research a different business with a similar name. The exact business is at ${url}${locationContext}.
 
 Find and report:
 1. OWNERSHIP: Who owns this funeral home? Is it family-owned or corporate-owned? Which generation? Is it part of a chain like SCI/Dignity Memorial, NorthStar, or Foundation Partners? Check state business filings if possible.
@@ -479,7 +555,7 @@ Be specific about what they DO and DO NOT have.`,
       .map(([path, text]) => `=== PAGE: ${baseUrl}${path} ===\n${text}`)
       .join('\n\n');
 
-    const synthesisPrompt = `You are a senior business intelligence analyst compiling a comprehensive prospect dossier. You have been given REAL data from actual website crawling, subdomain probing, and 7 parallel live web searches. Your job is to compile this into a thorough, verified research profile that a sales team can rely on for meeting preparation.
+    const synthesisPrompt = `You are a senior business intelligence analyst compiling a comprehensive prospect dossier. You have been given REAL data from actual website crawling, subdomain probing, ground-truth verification, and 7 parallel live web searches. Your job is to compile this into a thorough, verified research profile that a sales team can rely on for meeting preparation.
 
 CRITICAL RULES:
 - ONLY include information that is ACTUALLY found in the sources below.
@@ -489,6 +565,10 @@ CRITICAL RULES:
 - Distinguish between CONFIRMED facts and INFERRED conclusions (mark inferences with "[inferred]").
 - When you have conflicting information from different sources, note both and indicate which is more likely accurate.
 - For any dollar amounts, ratings, or counts, only include if explicitly found in sources.
+- GROUND TRUTH takes absolute precedence. If any web search result disagrees with the GROUND TRUTH NAP block below, the ground truth is correct. Never place this business in a different city or state than the ground truth.
+
+=== GROUND TRUTH (VERIFIED NAP - USE THESE EXACT VALUES, DO NOT OVERRIDE) ===
+${groundTruth ? JSON.stringify(groundTruth, null, 2) : 'Ground truth verification not available, use website data and flag low confidence'}
 
 === WEBSITE CONTENT (deep crawl of ${url}) ===
 Pages found: ${foundPages.join(', ')}
@@ -680,7 +760,7 @@ Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLY the J
 
     const message = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 6000,
+      max_tokens: 8000,
       messages: [{ role: 'user', content: synthesisPrompt }],
     });
 
@@ -701,14 +781,45 @@ Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLY the J
       return;
     }
 
-    // Attach raw search data for downstream use
+    // ── GROUND TRUTH OVERRIDE: lock NAP fields to verified values ──
+    // This is the final safeguard. Even if Claude hallucinated, we overwrite with verified truth.
+    if (groundTruth) {
+      const gt = groundTruth;
+      const isValid = (v) => v && v !== 'UNVERIFIED' && v !== 'Not found';
+      if (isValid(gt.exact_business_name)) researchData.business_name = gt.exact_business_name;
+      if (isValid(gt.street_address)) researchData.address = gt.street_address;
+      if (isValid(gt.city)) researchData.city = gt.city;
+      if (isValid(gt.state)) researchData.state = gt.state;
+      if (isValid(gt.zip)) researchData.zip = gt.zip;
+      if (isValid(gt.phone)) researchData.phone = gt.phone;
+      if (isValid(gt.email)) researchData.email = gt.email;
+      if (isValid(gt.website_canonical)) researchData.website_url = gt.website_canonical;
+      if (Array.isArray(gt.all_locations) && gt.all_locations.length > 0) {
+        // Prefer verified locations over synthesized ones
+        researchData.locations = gt.all_locations.map(l => ({
+          name: l.name || researchData.business_name,
+          address: l.address || '',
+          area: l.city_state_zip || '',
+          phone: l.phone || '',
+        }));
+      }
+      researchData._ground_truth = {
+        verified: true,
+        confidence: gt.confidence || 'unknown',
+        sources: gt.verification_sources || [],
+      };
+    } else {
+      researchData._ground_truth = { verified: false, confidence: 'none', sources: [] };
+    }
+
+    // Attach raw search data for downstream use (bumped from 3000 -> 4500 chars per search for richer quotes)
     researchData._raw_searches = {};
     Object.entries(searchResults).forEach(([key, val]) => {
-      researchData._raw_searches[key] = val ? val.substring(0, 3000) : null;
+      researchData._raw_searches[key] = val ? val.substring(0, 4500) : null;
     });
 
-    // Attach raw website content for meeting prep
-    researchData._raw_website_content = websiteContentStr.substring(0, 8000);
+    // Attach raw website content for meeting prep (bumped from 8000 -> 12000 for quote richness)
+    researchData._raw_website_content = websiteContentStr.substring(0, 12000);
 
     send('progress', { phase: 'complete', message: `Research complete. Found ${researchData.owners_and_directors?.length || 0} people, ${researchData.competitors?.length || 0} competitors, ${foundPages.length} website pages.` });
     send('result', { data: researchData });
@@ -867,192 +978,324 @@ async function handleMeetingPrep(req, res) {
   const contact = contactName || research.owner_name || 'the owner';
   const role = contactRole || 'Owner/Director';
 
-  const prompt = `You are a senior sales strategist at Mortem AI with 15 years of experience in funeral industry SaaS sales. You are creating the definitive meeting prep document for Tom Magee to use before a sales call. This document must be so thorough that Tom walks into the meeting knowing more about this funeral home's digital presence than the owner does.
+  // ── IMMUTABLE GROUND TRUTH BLOCK (locked NAP to prevent hallucinations) ──
+  const gt = research._ground_truth || { verified: false, confidence: 'none', sources: [] };
+  const groundTruthBlock = `
+==================================================================
+IMMUTABLE GROUND TRUTH (VERIFIED NAP, DO NOT CONTRADICT ANYWHERE)
+==================================================================
+Business Name: ${research.business_name}
+Street Address: ${research.address || 'Not verified'}
+City: ${research.city || 'Not verified'}
+State: ${research.state || 'Not verified'}
+ZIP: ${research.zip || 'Not verified'}
+Phone: ${research.phone || 'Not verified'}
+Website: ${research.website_url || 'Not verified'}
+All Locations: ${(research.locations || []).map(l => `${l.name || ''} at ${l.address || l.area || ''} ${l.phone ? '(' + l.phone + ')' : ''}`).join(' | ') || 'Single location or not verified'}
+Verification Confidence: ${gt.confidence}
+Verification Sources: ${(gt.sources || []).join(', ') || 'Website direct crawl'}
 
-CRITICAL: This is not a template. Every single section must contain REAL, SPECIFIC information drawn from the research data provided. If information was not found, say exactly what was not found and what that gap means strategically. Never fill sections with generic funeral industry boilerplate.
+RULE: Every mention of location, phone, or address in this document MUST match the ground truth above exactly. Never place this business in a different city or state. Never mix up locations. If ground truth says "Washington, NC", never write "Washington, CT" or "North Haven, CT" anywhere in this document. This is non-negotiable.
+==================================================================
+`;
 
-FUNERAL HOME RESEARCH DATA:
+  // ── RAW SEARCH EXCERPTS (for direct quoting) ──
+  const rawSearches = research._raw_searches || {};
+  const rawSearchBlock = Object.entries(rawSearches)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `--- RAW SEARCH: ${k.toUpperCase()} ---\n${v}`)
+    .join('\n\n');
+
+  const prompt = `You are the senior sales strategist at Mortem AI. You are producing a pre-meeting briefing document for Tom Magee to read in the 20 minutes before a live sales call with a funeral home. Tom must walk into that meeting knowing more about this specific business than the owner knows about their own digital presence. This document will also be used as the foundation for a formal proposal, so it must read at the quality level of a top-tier management consulting pre-read.
+
+${groundTruthBlock}
+
+============================================================
+QUALITY BAR: HOWARD K. HILL FUNERAL SERVICES REFERENCE STANDARD
+============================================================
+The benchmark you must match is the Mortem AI proposal for Howard K. Hill Funeral Services. That document demonstrates the level of named-specificity required in every single section. Study the patterns below and replicate the density level exactly:
+
+PATTERN 1: Named people, not generic roles.
+BAD:  "The owner has been running the business for many years"
+GOOD: "Anthony White, alongside founder Howard K. Hill, has led the group since the Hartford expansion"
+
+PATTERN 2: Real dates and history, not vague references.
+BAD:  "Established funeral home with a long tradition"
+GOOD: "Operating for over 150 years, including the Henry L. Fuqua brand in Bloomfield acquired in 2015"
+
+PATTERN 3: Specific integrations by name, not generic tech.
+BAD:  "They use a CRM and a calendar system"
+GOOD: "They run GoHighLevel (GHL) for email nurture plus four separate Outlook calendars: at-need and pre-need for New Haven, and at-need and pre-need for Hartford/Bloomfield"
+
+PATTERN 4: Proof points with real names and numbers.
+BAD:  "Other clients have seen results with Sarah"
+GOOD: "Matt Thompson at Chippewa Valley Cremation saw 2 pre-need arrangements plus 3 at-need calls in his first 6 months with Sarah"
+
+PATTERN 5: Direct review quotes in quotation marks, attributed to source.
+BAD:  "Families appreciate their care"
+GOOD: "'They were still calling to check in three months after my husband's funeral. That is not something you can buy anywhere else.' (Google Review, Hartford Location)"
+
+PATTERN 6: Location-aware breakdown for multi-location operators.
+BAD:  "They have multiple locations"
+GOOD: "Three locations: 1240 Albany Avenue Hartford, 1 Simsbury Road Bloomfield (Henry L. Fuqua brand), and 1287 Chapel Street New Haven"
+
+PATTERN 7: Specific dollar amounts and scenarios, not vague ROI.
+BAD:  "Strong ROI potential"
+GOOD: "Setup $1,495 one-time. Monthly $797 (base $397 + $200 Hartford + $200 New Haven). Break-even at one at-need call. Conservative model: 500 families per year across three locations."
+
+PATTERN 8: Specific objection responses that quote the prospect's own review themes.
+BAD:  "Handle the 'we're traditional' objection"
+GOOD: "Objection: 'Our families are traditional and expect a human touch.' Response: 'Your own five-star review from the Hartford family who said they received a check-in call three months after the funeral is exactly what Sarah protects and extends. She does not replace that moment. She guarantees it reaches every family who looks for you at 11pm before they ever dial.'"
+
+EVERY section of your document must contain AT LEAST 3 facts at the specificity level above. Count them before finalizing each section. If a section cannot reach 3 named specifics, write "GAP: [exact missing data point]" in that section and explain the strategic implication of the gap. Do not pad with generic funeral industry filler under any circumstances.
+
+============================================================
+RESEARCH DATA
+============================================================
+
+CORE BUSINESS FACTS:
 - Business: ${research.business_name}
 - Contact: ${contact} (${role})
-- Phone: ${research.phone || 'Not found'}
-- Address: ${research.address || ''}, ${research.city || ''}, ${research.state || ''}
-- Founded: ${research.founded || 'Not found'}
-- Ownership: ${research.ownership_type || 'Not found'} ${research.ownership_details || ''}
-- Services: ${(research.services || []).join(', ')}
-- Locations: ${(research.locations || []).map(l => l.name + ' - ' + (l.address || l.area || '')).join('; ')}
-- Service Area: ${research.service_area || 'local area'}
-- Unique Points: ${research.unique_selling_points || 'N/A'}
+- Phone: ${research.phone || 'GAP: phone not verified'}
+- Address: ${research.address || ''}, ${research.city || ''}, ${research.state || ''} ${research.zip || ''}
+- Founded: ${research.founded || 'GAP: founding year not verified'}
+- Ownership Type: ${research.ownership_type || 'GAP: ownership not verified'}
+- Ownership Details: ${research.ownership_details || ''}
+- Corporate Parent: ${research.corporate_parent || 'None detected (likely independent)'}
+- Generation: ${research.generation || 'GAP: generation not verified'}
+- Services: ${(research.services || []).join(', ') || 'GAP: services not verified'}
+- Service Detail: ${research.services_detail ? JSON.stringify(research.services_detail) : 'Not extracted'}
+- Locations: ${(research.locations || []).map(l => `${l.name || ''} at ${l.address || l.area || ''} ${l.phone ? '(' + l.phone + ')' : ''}`).join(' | ') || 'Single location assumed'}
+- Service Area: ${research.service_area || 'Local area'}
+- Unique Selling Points: ${research.unique_selling_points || 'GAP: differentiation not clear'}
 - Website: ${research.website_url || ''}
-- Tagline: ${research.tagline || ''}
-${demoUrl ? '- Live Demo: ' + demoUrl : ''}
+- Tagline: ${research.tagline || 'GAP: no tagline found'}
+${demoUrl ? '- Live Demo URL: ' + demoUrl : '- Live Demo: not yet provisioned'}
 
-TECH STACK CONFIRMED:
-${(research.tech_stack || []).join('\n')}
-${research.tech_stack_gaps ? 'GAPS: ' + (research.tech_stack_gaps || []).join(', ') : ''}
+PEOPLE FOUND:
+${(research.owners_and_directors || []).map(p => `- ${p.name} (${p.role}): ${p.background || 'No details'} [LinkedIn: ${p.linkedin || 'not found'}] [Source: ${p.source || 'research'}]`).join('\n') || 'GAP: No named people found in research. The contact for this meeting is ' + contact + ' (' + role + '), but their specific background could not be verified. Flag as a discovery question for the call.'}
+
+TECH STACK DETECTED:
+${(research.tech_stack || []).join('\n') || 'GAP: no tech stack detected'}
+Tech Stack Confirmed: ${(research.tech_stack_confirmed || []).join(', ') || 'None'}
+Tech Stack Gaps: ${(research.tech_stack_gaps || []).join(', ') || 'Not assessed'}
 GHL Detected: ${research.has_ghl || research.ghl_detected || false}
-Active Subdomains: ${(research.active_subdomains || []).join(', ') || 'None'}
+Parting Pro Detected: ${research.has_parting_pro || false}
+Active Subdomains: ${(research.active_subdomains || []).join(', ') || 'None detected'}
 Has Online Booking: ${research.has_online_booking || false}
 Has Chat Widget: ${research.has_chat_widget || false}
 Has GPL Online: ${research.has_gpl_online || false}
 Has Pre-Planning Page: ${research.has_pre_planning_page || false}
 Has Email Nurture: ${research.has_email_nurture || false}
-
-PEOPLE FOUND:
-${(research.owners_and_directors || []).map(p => `- ${p.name} (${p.role}): ${p.background || 'No details'} [Source: ${p.source || 'research'}]`).join('\n') || 'None found'}
+Has Blog: ${research.has_blog || false}
+Has Analytics: ${research.has_analytics || false}
+Has Structured Data: ${research.has_structured_data || false}
+Mobile Responsive: ${research.has_mobile_responsive || 'not tested'}
 
 GOOGLE REVIEWS:
 Rating: ${research.google_reviews?.rating || 'Not found'}
 Count: ${research.google_reviews?.count || 'Not found'}
-Positive themes: ${(research.google_reviews?.positive_themes || []).join(', ') || 'Not found'}
-Negative themes: ${(research.google_reviews?.negative_themes || []).join(', ') || 'Not found'}
+Response Rate: ${research.google_reviews?.response_rate || 'Not found'}
+Positive Themes: ${(research.google_reviews?.positive_themes || []).join(' | ') || 'Not found'}
+Negative Themes: ${(research.google_reviews?.negative_themes || []).join(' | ') || 'None flagged'}
+Recent Trend: ${research.google_reviews?.recent_trend || 'Not enough data'}
 
-COMPETITORS:
-${(research.competitors || []).map(c => `- ${c.name}: ${c.google_rating || '?'} stars (${c.review_count || '?'} reviews), ${c.ownership_type || 'unknown'}, chat: ${c.has_chat}, booking: ${c.has_booking}, AI: ${c.has_ai}`).join('\n') || 'None found'}
+OTHER REVIEWS:
+Yelp: ${research.yelp_reviews?.rating || 'Not found'} (${research.yelp_reviews?.count || '0'} reviews)
+BBB: ${research.bbb_rating || 'Not found'} (${research.bbb_complaints || 'no complaints'})
+Facebook: ${research.facebook_reviews?.rating || 'Not found'}
+
+PRICING INTELLIGENCE:
+${research.pricing ? JSON.stringify(research.pricing, null, 2) : 'Not available'}
+
+PRE-PLANNING INFRASTRUCTURE:
+${research.pre_planning_infrastructure ? JSON.stringify(research.pre_planning_infrastructure, null, 2) : 'Not assessed'}
 
 MARKET DATA:
 ${research.market_data ? JSON.stringify(research.market_data, null, 2) : 'Not available'}
 
-PRICING:
-${research.pricing ? JSON.stringify(research.pricing, null, 2) : 'Not available'}
+COMPETITORS:
+${(research.competitors || []).map(c => `- ${c.name} (${c.url || 'no URL'}): ${c.distance || '?'} away, ${c.google_rating || '?'} stars across ${c.review_count || '?'} reviews, ${c.ownership_type || 'unknown ownership'}. Chat: ${c.has_chat ? 'yes' : 'no'}. Booking: ${c.has_booking ? 'yes' : 'no'}. AI: ${c.has_ai ? 'yes' : 'no'}. Price: ${c.price_positioning || '?'}. Tech: ${c.tech_assessment || 'not assessed'}`).join('\n') || 'GAP: No competitors found in research. Flag as a pre-meeting research task.'}
 
-PRE-PLANNING INFRASTRUCTURE:
-${research.pre_planning_infrastructure ? JSON.stringify(research.pre_planning_infrastructure, null, 2) : 'Not available'}
-
-DIGITAL ASSESSMENT:
+DIGITAL PRESENCE ASSESSMENT:
 Score: ${research.digital_presence_assessment?.score || 'Not rated'}/10
-${research.digital_presence_assessment ? JSON.stringify(research.digital_presence_assessment, null, 2) : 'Not available'}
+Strengths: ${(research.digital_presence_assessment?.strengths || []).join(' | ') || 'Not identified'}
+Weaknesses: ${(research.digital_presence_assessment?.weaknesses || []).join(' | ') || 'Not identified'}
+Critical Gaps: ${(research.digital_presence_assessment?.critical_gaps || []).join(' | ') || 'Not identified'}
+Opportunities: ${(research.digital_presence_assessment?.opportunities || []).join(' | ') || 'Not identified'}
 
-Sarah AI Fit Score: ${research.sarah_ai_fit_score || 'Not rated'}
+SARAH AI FIT SCORE: ${research.sarah_ai_fit_score || 'Not rated'}
 
-RAW WEBSITE CONTENT (for context):
-${research._raw_website_content || 'Not available'}
+SOCIAL MEDIA:
+${research.social_media ? JSON.stringify(research.social_media, null, 2) : 'Not assessed'}
 
-DESIGN REQUIREMENTS:
-- Single complete HTML file with all CSS inline in a <style> block
-- Fonts: Cormorant Garamond for headings (serif), DM Sans for body (sans-serif) via Google Fonts
-- Use a CSS class prefix based on the business initials to namespace all classes
-- All colors must use !important to ensure compatibility
-- Color palette: dark navy primary (#0f1d2e), warm accent gold/bronze (#c8a96e), cream backgrounds (#faf8f5)
-- No CSS variables, use direct color values with !important
-- Clean, elegant, print-friendly layout
-- Max width container around 900px, centered
-- Mortem AI logo: https://storage.googleapis.com/msgsndr/KwHyQsuzPI6o5CiZfPfN/media/689ef6fa5dc21c2e15d6807f.png
+COMMUNITY INVOLVEMENT:
+${(research.community_involvement || []).join(' | ') || 'GAP: no community involvement found'}
 
-DOCUMENT STRUCTURE (every section must have REAL content, not filler):
+RECENT NEWS:
+${(research.recent_news || []).join(' | ') || 'GAP: no recent news found'}
 
-1. BRANDED HEADER
-   - Mortem AI logo, document title, date, demo link if available
+ESTIMATED CASE VOLUME: ${research.estimated_annual_cases || 'Not estimated'}
+ESTIMATED STAFF COUNT: ${research.staff_count_estimate || 'Not estimated'}
+OBITUARY VOLUME: ${research.obituary_volume || 'Not counted'}
 
-2. EXECUTIVE SUMMARY (3-4 sentences)
-   - Who they are, what their current digital state is, why they are a good Sarah AI prospect, and the single most compelling angle for this meeting
+RESEARCH GAPS:
+${(research.research_gaps || []).join(' | ') || 'None flagged'}
+Confidence Level: ${research.confidence_level || 'Not stated'}
 
-3. CONTACT INTELLIGENCE
-   - ${contact} (${role}) profile with everything found about them
-   - Career path, likely motivations, communication style prediction
-   - What keeps this person up at night? Be specific to their situation.
-   - Relationship mapping: who else at the business might influence this decision?
-   - Recommended approach angle for this specific person
+============================================================
+RAW WEBSITE CONTENT (for direct quotes, pull language from here)
+============================================================
+${(research._raw_website_content || 'Not available').substring(0, 8000)}
 
-4. COMPANY DEEP DIVE
-   - Verified founding details, generation ownership
-   - Community position and reputation (use actual review data)
-   - Service portfolio analysis with specific services listed
-   - Location details with actual addresses
-   - Obituary/case volume estimates with methodology
-   - Revenue estimate based on case volume and average service value
+============================================================
+RAW SEARCH EXCERPTS (for direct quotes, citations, named facts)
+============================================================
+${rawSearchBlock ? rawSearchBlock.substring(0, 12000) : 'Not available'}
 
-5. TECHNOLOGY AUDIT (this must be a detailed grid)
-   - Create a table with columns: Category, Current State (Confirmed/Not Found), Gap Level (Critical/Moderate/Low), Sarah AI Solution
-   - Categories: Website Platform, Mobile Responsiveness, SEO/Local Search, Google Business Profile, Online Booking, Live Chat/After-Hours, CRM/Lead Management, Email Marketing, Pre-Planning Digital Tools, Arrangement Software, Content Marketing, Social Media Management, Review Management, Analytics/Tracking
-   - For each row, note what was ACTUALLY found vs what is missing
-   - If GHL was detected, note specifically what they use it for and what they are NOT using it for
-   - If Parting Pro or other arrangement software detected, note it
+============================================================
+DESIGN SYSTEM (match HKH visual language exactly)
+============================================================
+- Single complete HTML file with all CSS inline in a single <style> block at the top
+- Google Fonts: EB Garamond (serif, weights 400,500,600, ital 400 500) for all headings and display text, Poppins (sans-serif, weights 300,400,500,600) for all body text
+- Color palette (use direct hex values with !important, no CSS variables in the output):
+  * Dark primary: #1a1818 (Mortem dark)
+  * Gold accent: #c4922a (Mortem gold)
+  * Gold light: #d9a84a
+  * Burgundy narrative accent: #9a3236 (for strategic insight callouts)
+  * Burgundy light: #c66a6e
+  * Burgundy deep: #3d1214 (for cover background)
+  * Cream background: #f7f3ef
+  * White content: #ffffff
+  * Text primary: #1e1e1e
+  * Text muted: #555555
+  * Border: #e0d5cc
+- Layout structure (match HKH):
+  * Cover header: dark burgundy-deep background with radial gradients, top bar with Mortem logo and doc label, cover-body with eyebrow dot, H1 with EB Garamond serif, subtitle, 4-item meta row divided by vertical rules
+  * Content wrap: max-width 960px centered, padding 56px 48px 96px
+  * Section pattern: section-label eyebrow in burgundy uppercase letterspaced + EB Garamond H2 with burgundy italic em + body content
+  * Horizontal rule dividers between major sections
+  * Card grids (2 and 3 columns) with top border in burgundy
+  * Dark boxes: #1a1818 background, burgundy-light label, white/78% body text, radial gradient decoration
+  * Burgundy boxes: #9a3236 background for strategic narrative blocks
+  * Quote blocks: cream tinted background with burgundy left border, EB Garamond italic
+  * Scope tables: dark header with burgundy-light accent column, alternating row colors, clean borders
+  * Pricing boxes: 2-col grid, featured box with burgundy border and "Your Plan" tag
+  * ROI strip: dark background with 4 cells, one highlighted in burgundy, with roi-note footer
+  * Timeline: vertical line with gradient fade, dots, week labels in burgundy
+  * Proof grid: 2-col cards with burgundy stars, serif italic quote, uppercase attribution
+  * Steps list: numbered circles in burgundy
+  * Signoff: bordered top, Tom Magee details on left, Mortem badge on right
+- Intro-block style: white background, burgundy left border 4px, padding 24px 28px
+- Callout style: soft cream background, gold left border 3px, for notes and warnings
+- Mortem AI logo URL: https://storage.googleapis.com/msgsndr/KwHyQsuzPI6o5CiZfPfN/media/689ef6fa5dc21c2e15d6807f.png
+- Responsive: at 680px collapse grids to 1 column, stack meta row, adjust cover title to 34px
+- Print-friendly: page breaks before major sections
 
-6. COMPETITIVE LANDSCAPE
-   - Table of competitors with: Name, Distance, Google Rating, Reviews, Chat?, Booking?, AI?, Ownership Type
-   - Use REAL competitor data from research
-   - Identify which competitors are ahead digitally and which are behind
-   - First-mover advantage analysis: is anyone in this market using AI yet?
+============================================================
+DOCUMENT STRUCTURE (17 sections, each with at least 3 named specifics)
+============================================================
 
-7. GAP ANALYSIS TABLE
-   - Columns: "What Families Need", "Current State at ${research.business_name}", "With Sarah AI", "Impact"
-   - Rows must be specific to THIS funeral home based on the tech audit
-   - At least 8 rows covering: after-hours response, pre-planning guidance, FAQ handling, appointment scheduling, grief resources, service information, pricing transparency, multilingual support
+SECTION 1: COVER HEADER
+- Dark burgundy-deep background (#3d1214) with radial gradients
+- Top bar: Mortem AI logo (left), "Pre-Meeting Briefing / Confidential" (right)
+- Eyebrow: small burgundy dot plus "Prepared for ${research.business_name}"
+- H1: "[Business Name in EB Garamond]: [strategic angle in burgundy italic]"
+  Example: "Hillside Chapel: Meeting 2026 Families Where They Already Are."
+- Subtitle: one-line strategic framing
+- Meta row (4 items separated by vertical rules): Contact, Location, Prepared by, Date
+- Bottom rule: 3px linear gradient from burgundy to burgundy-light fading to transparent
 
-8. PRICING AND ROI
-   - If GPL data was found, reference their actual pricing
-   - Use their estimated case volume for calculations
-   - Table: Conservative vs Moderate vs Optimistic scenarios
-   - Columns: Monthly metric, Conservative, Moderate, Optimistic
-   - Rows: After-hours inquiries captured, Conversion rate improvement, New cases/month, Avg service value, Monthly revenue impact, Sarah AI cost, Net monthly ROI
-   - Show 12-month projection
-   - Break-even analysis
+SECTION 2: STRATEGIC OPENING (intro-block)
+A 3-to-4 sentence opener that pulls ONE specific detail from reviews, ONE specific detail from their website, and ONE strategic observation that ties them to the meeting angle. This section must demonstrate Tom has done his homework in the first paragraph.
 
-9. TALK TRACKS (written as actual dialogue, not bullet points)
+SECTION 3: LOCKED GROUND TRUTH PANEL
+A compact card confirming verified NAP. Show business name, address, city/state/zip, phone, website, all locations, and a small note "Verified via [source]" with confidence level.
 
-   OPENING (2-3 scripted options):
-   - Option A: Lead with a specific observation about their business
-   - Option B: Lead with a competitor insight
-   - Option C: Lead with a family experience angle
+SECTION 4: THE OPPORTUNITY
+Three-card grid framing the problem specifically for this business:
+- Card 1: "AI Search Gap" with a specific observation about THIS business's searchability
+- Card 2: "After-Hours Gap" with their specific coverage situation
+- Card 3: "[Specific third gap for this business]" based on what the audit found
+Followed by a burgundy quote block with a strategic observation about the opportunity.
 
-   DISCOVERY QUESTIONS (as natural conversation flow):
-   - "When a family calls at 2am on a Saturday, what happens right now?"
-   - "How many calls or website visits do you think happen after hours that you never know about?"
-   - "If I told you ${research.competitors?.[0]?.name || 'a competitor nearby'} is looking at AI tools, how would that change your timeline?"
-   - Customize 3-4 more based on their specific gaps found in the audit
+SECTION 5: COMPANY DEEP DIVE
+Narrative paragraph (founding year, history, generation) followed by a 3-card grid:
+- Card: Case Volume Estimate (with methodology explaining how it was derived)
+- Card: Revenue Estimate (conservative, using case volume x average service value)
+- Card: Staff & Operational Profile
+Followed by a detailed location breakdown table if multi-location.
 
-   OBJECTION HANDLING (scripted responses):
-   - "We are traditional / our families expect a human touch" -- [specific response using their review data to show families already want digital options]
-   - "We cannot afford this right now" -- [specific ROI response using their case volume]
-   - "We already have a good website" -- [specific response referencing their actual tech gaps found]
-   - "Our families are too old for AI" -- [response with demographic data about their market]
-   - "We use GHL already" -- [response about how Sarah complements GHL, specific to what they use it for]
-   - "This feels impersonal" -- [response using their own review themes about compassion]
+SECTION 6: CONTACT INTELLIGENCE
+Dark box with everything known about ${contact}. If nothing is known, acknowledge that and list 5 discovery questions to ask in the first 5 minutes of the call. Include predicted communication style and recommended approach angle.
 
-   DEMO WALKTHROUGH SCRIPT:
-   - Step-by-step script for walking through the live demo
-   - What to show first, what questions to ask during the demo
-   - How to connect each feature to their specific pain points
+SECTION 7: WHY SARAH FITS (burgundy box narrative)
+A 2-paragraph narrative in the burgundy strategic box style. First paragraph pulls directly from their reviews/website to establish what they already do well. Second paragraph connects that culture to Sarah's design philosophy. This is the emotional connection that makes the rest of the pitch land.
 
-   CLOSING:
-   - 2-3 closing approaches based on meeting dynamics
-   - Specific next steps with timeline
+SECTION 8: DIGITAL AUDIT (scope table)
+Dark-header scope table with columns: Category | Current State | Gap Level | Sarah Solution
+Minimum 14 rows covering: Website Platform, Mobile Responsiveness, Page Load Speed, SEO/Local Search, Google Business Profile, Online Booking, Live Chat/After-Hours, AI-Ready Content, CRM/Lead Management, Email Marketing, Pre-Planning Digital Tools, Arrangement Software, Content Marketing, Social Media, Review Management, Analytics Tracking, Accessibility.
+Every row must note what was ACTUALLY found (or explicitly not found) for THIS business.
 
-10. PRE-MEETING CHECKLIST
-    - Checkbox-styled list of 10-15 specific actions
-    - Each item must be actionable and specific to this prospect
-    - Include: review their latest Google reviews, check their social media this week, test their website on mobile, verify the demo works, prepare printed leave-behind, etc.
+SECTION 9: COMPETITIVE LANDSCAPE
+Scope table of 5-7 real competitors with columns: Name | Distance | Rating | Reviews | Chat | Booking | AI | Ownership | Notes
+Followed by a first-mover advantage paragraph. If no competitors were found, write "GAP: competitor research incomplete" and list specific pre-meeting research tasks.
 
-11. EMAIL SEQUENCE
-    - Pre-meeting email (send 24 hours before)
-    - Follow-up email template (send within 2 hours after meeting)
-    - Second follow-up (send 3 days after if no response)
-    - Each email must reference specific details about their business
+SECTION 10: FAMILY-NEED GAP ANALYSIS
+Scope table with columns: What Families Need | Current State at ${research.business_name} | With Sarah | Impact
+Minimum 10 rows. Every row specific to THIS business.
 
-12. APPENDIX: RAW RESEARCH NOTES
-    - Summary of what was found and verified
-    - Research gaps and what they mean
-    - Confidence assessment
-    - Recommendations for additional research before meeting
+SECTION 11: PRICING AND ROI MODEL
+Two pricing boxes side by side:
+- One-time setup: $1,495 with breakdown of included items
+- Monthly subscription: $${research.locations && research.locations.length > 1 ? (397 + 200 * (research.locations.length - 1)) : 397} (${research.locations && research.locations.length > 1 ? 'base $397 + $200 per additional location for ' + research.locations.length + ' locations' : 'single location'}) with breakdown
+Followed by dark ROI strip (4 cells): Setup Investment | Monthly Cost | Avg At-Need Revenue | Break-Even Point (show "1 call" if possible)
+Followed by a roi-note with a reference proof point and the calculated case-volume-based projection.
 
-13. FOOTER
-    - "Prepared by Mortem AI Sales Intelligence"
-    - Mortem AI logo
-    - Confidential notice
-    - Contact: Tom Magee, Mortem AI
-    - Date prepared
+SECTION 12: TALK TRACKS (scripted dialogue, not bullet summaries)
+Subsection 12a: OPENING (3 scripted options labeled Option A/B/C, each a 2-3 sentence verbatim opening line Tom can say)
+Subsection 12b: DISCOVERY QUESTIONS (8 questions, each customized to THIS business)
+Subsection 12c: OBJECTION HANDLING (6 objections with scripted responses that quote their review themes)
+Subsection 12d: DEMO WALKTHROUGH SCRIPT (5-step walkthrough with exact lines to say at each step)
+Subsection 12e: CLOSING (3 closing approaches with exact language)
 
-CRITICAL RULES:
-- Never use em dashes anywhere (use commas, periods, colons, or "to" instead)
-- Write like a senior strategist, not a template filler
-- Every claim must be traceable to the research data
-- If data was not found, say so explicitly and explain what that gap means
-- The document must be at least 1200 lines of HTML
-- Tables must have clean borders and alternating row colors
-- Use checkmark and X icons (Unicode or SVG) in comparison tables
-- Include a print stylesheet so this looks good when printed
+SECTION 13: PROOF POINTS (proof grid of review quotes)
+2-column grid of 4 real review quote cards. Each card: burgundy star row + serif italic quote in quotation marks + uppercase attribution (e.g. "Google Review, Hartford Location"). Pull REAL quotes from their actual reviews wherever possible. If review quotes could not be extracted, write "GAP: actual review quotes could not be captured. Pull 4 specific quotes from their Google Business Profile before the meeting" in a callout instead.
+Followed by a burgundy box paragraph: "What this means for the Sarah pitch".
 
-Return ONLY the complete HTML. Start with <!DOCTYPE html> and end with </html>. No markdown, no code blocks, no explanation.`;
+SECTION 14: PRE-MEETING CHECKLIST
+Numbered steps-list with 12-15 specific actions Tom must take in the 24 hours before the meeting. Each action must be specific to THIS prospect (e.g. "Re-check Google Business Profile for ${research.business_name} tonight and note any new reviews posted this week" not "check reviews").
+
+SECTION 15: EMAIL SEQUENCE
+Three email blocks:
+- Pre-meeting email (send 24 hours before): full subject and body, under 150 words
+- Post-meeting follow-up (send within 2 hours after meeting): full subject and body referencing specifics discussed
+- Second follow-up (send 3 days later if no response): full subject and body
+Each email must reference at least 2 specific business details and include the demo link if available.
+
+SECTION 16: RESEARCH SOURCES AND CONFIDENCE (intro-block)
+A paragraph listing what was verified, what was inferred, what remained unknown, and overall confidence level. End with specific pre-meeting research tasks to close remaining gaps.
+
+SECTION 17: SIGNOFF
+- Horizontal rule at top
+- Left: "Tom Magee" in bold, "Co-Founder, Mortem AI" subtitle, one-paragraph signoff text, contact details (mortemai.com and tom@mortemai.com)
+- Right: Mortem badge (dark pill with logo)
+
+============================================================
+CRITICAL ENFORCEMENT RULES
+============================================================
+1. Every section must contain AT LEAST 3 named-specific facts. A "named specific" means: a named person, a named place, a specific date or year, a specific dollar amount, a direct quote in quotation marks, a named integration, a URL, a specific rating number, or a specific count. Generic phrases like "quality service", "established provider", "caring team", "modern technology", "comprehensive offerings" count as ZERO and must be replaced.
+2. Every claim must trace back to the research data, ground truth, or raw search excerpts provided above. Do NOT fabricate.
+3. Direct quotes from reviews go in quotation marks with source attribution.
+4. Location mentions MUST match ground truth NAP exactly. Never place the business in a city/state different from ground truth.
+5. If a section cannot reach 3 named specifics, write a visible GAP note in that section explaining exactly what is missing and the pre-meeting research task to close it. Do NOT pad with filler.
+6. Never use em dashes anywhere. Use commas, periods, colons, or "to" instead.
+7. Write in the voice of a senior strategist who has studied this business for hours, not a template filler.
+8. Minimum 1600 lines of HTML. Maximum density per section. No whitespace padding.
+9. Every dollar amount, rating, review count, date, and named person must come from the research data.
+10. Include proper meta tags, favicon emoji, and a print stylesheet.
+
+Return ONLY the complete HTML document. Start with <!DOCTYPE html> and end with </html>. No markdown code fences, no explanation, no commentary before or after the HTML.`;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -1060,7 +1303,7 @@ Return ONLY the complete HTML. Start with <!DOCTYPE html> and end with </html>. 
 
   const stream = await client.messages.stream({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 16000,
+    max_tokens: 20000,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -1163,34 +1406,55 @@ async function handleRegeneratePrep(req, res) {
 
   const factCheckSummary = typeof factCheckResults === 'string' ? factCheckResults : JSON.stringify(factCheckResults, null, 2);
 
-  const prompt = `You are a senior sales strategist at Mortem AI. You previously generated a meeting prep document that has now been fact-checked with live internet research. Regenerate the COMPLETE document incorporating all verified facts, corrections, and new information discovered.
+  const gt = research._ground_truth || { verified: false, confidence: 'none', sources: [] };
+  const groundTruthBlock = `
+==================================================================
+IMMUTABLE GROUND TRUTH (VERIFIED NAP, DO NOT CONTRADICT ANYWHERE)
+==================================================================
+Business Name: ${research.business_name}
+Street Address: ${research.address || 'Not verified'}
+City: ${research.city || 'Not verified'}
+State: ${research.state || 'Not verified'}
+ZIP: ${research.zip || 'Not verified'}
+Phone: ${research.phone || 'Not verified'}
+Website: ${research.website_url || 'Not verified'}
+All Locations: ${(research.locations || []).map(l => `${l.name || ''} at ${l.address || l.area || ''} ${l.phone ? '(' + l.phone + ')' : ''}`).join(' | ') || 'Single location'}
+Verification Confidence: ${gt.confidence}
+
+RULE: Every mention of location, phone, or address MUST match the ground truth above. Never place this business in a different city or state. If the fact-check results below disagree with ground truth, ground truth wins.
+==================================================================
+`;
+
+  const prompt = `You are the senior sales strategist at Mortem AI. You previously generated a meeting prep document for ${research.business_name} that has now been fact-checked with live internet research. Regenerate the COMPLETE document incorporating all verified facts and corrections, while maintaining the Howard K. Hill reference quality bar (real named specifics in every section, direct review quotes, no generic filler).
+
+${groundTruthBlock}
 
 ORIGINAL CONTEXT:
 - Business: ${research.business_name}
 - Contact: ${contact} (${role})
 - Phone: ${research.phone || 'Not found'}
-- Address: ${research.address || ''}, ${research.city || ''}, ${research.state || ''}
+- Address: ${research.address || ''}, ${research.city || ''}, ${research.state || ''} ${research.zip || ''}
 - Services: ${(research.services || []).join(', ')}
 - Website: ${research.website_url || ''}
 ${demoUrl ? '- Live Demo: ' + demoUrl : ''}
 
-FACT-CHECK RESULTS (incorporate ALL of this new intelligence):
+FACT-CHECK RESULTS (incorporate ALL corrections and new intelligence):
 ${factCheckSummary}
 
 INSTRUCTIONS:
-- Regenerate the COMPLETE meeting prep HTML document
+- Regenerate the COMPLETE meeting prep HTML document using the original 17-section HKH-style structure (cover, strategic opening, locked NAP panel, opportunity, company deep dive, contact intelligence, why Sarah fits, digital audit, competitive landscape, family-need gap analysis, ROI model, talk tracks, proof points, pre-meeting checklist, email sequence, sources and confidence, signoff)
 - Replace incorrect claims with corrected information from fact-checking
-- Add all new information discovered
+- Add ALL new information discovered
 - Update competitor analysis with real competitors found
-- Update reviews data with current numbers
-- Mark verified facts with a subtle green checkmark indicator
-- Mark corrected items with a subtle indicator showing they were updated
-- Keep the same design: Cormorant Garamond headings, DM Sans body, branded navy/gold colors
-- Use CSS class prefix based on business initials
-- All colors must use !important, no CSS variables
-- Never use em dashes
-- Document must be at least 1200 lines of HTML
-- Include all sections from the original structure
+- Update reviews data with current numbers and direct quotes where available
+- Mark verified facts with a subtle green checkmark indicator (✓) next to the claim
+- Mark corrected items with a subtle update indicator (↻) next to the claim
+- Use the HKH design system: EB Garamond headings + Poppins body, dark primary #1a1818, gold #c4922a, burgundy narrative accent #9a3236, cream background #f7f3ef
+- All colors use direct hex values with !important, no CSS variables in output
+- Mortem logo URL: https://storage.googleapis.com/msgsndr/KwHyQsuzPI6o5CiZfPfN/media/689ef6fa5dc21c2e15d6807f.png
+- Never use em dashes, use commas, periods, colons, or "to" instead
+- Every section must contain at least 3 named specifics (person, place, date, dollar amount, quote, integration, URL, rating number, or count). No generic filler.
+- Document must be at least 1600 lines of HTML
 
 Return ONLY the complete HTML. Start with <!DOCTYPE html> and end with </html>.`;
 
@@ -1200,7 +1464,7 @@ Return ONLY the complete HTML. Start with <!DOCTYPE html> and end with </html>.`
 
   const stream = await client.messages.stream({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 16000,
+    max_tokens: 20000,
     messages: [{ role: 'user', content: prompt }],
   });
 
