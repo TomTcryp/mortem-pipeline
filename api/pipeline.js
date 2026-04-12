@@ -881,6 +881,7 @@ Based ONLY on the above real data, compile and return a JSON object. Return ONLY
 
 Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLSet boolean flags based on ACTUAL evidence found. Be thorough. Return ONLY the JSON.`;
 
+    // Send keepalive pings during synthesis to prevent SSE/Vercel timeout
     const keepalive = setInterval(() => {
       send('progress', { phase: 'compile', message: 'Still compiling research profile...' });
     }, 8000);
@@ -1709,7 +1710,7 @@ Return ONLY valid JSON.`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 1200,
+    max_tokens: 4000,
     messages: [{ role: 'user', content: prompt }],
   });
 
