@@ -240,7 +240,7 @@ Briefly note any major competitors and recent news mentions.
 
 For EVERY fact, include the source URL. Be exhaustive. This is the primary research source for a sales meeting.` }
         ],
-        max_tokens: 2000,
+        max_tokens: 1200,
         temperature: 0.1,
       }),
     });
@@ -630,55 +630,6 @@ Provide exact numbers and quote specific review themes. Cite sources.`,
 For each person found, provide: Full name, title, approximate tenure, source of information.`,
           2500
         ),
-
-        // Search 4: Competitor analysis deep dive
-        perplexitySearch(perplexityKey,
-          `Map the complete competitive landscape around "${businessNameHint}" funeral home (${url}):
-
-1. List the TOP 5-7 nearest competitor funeral homes with:
-   - Business name and exact address
-   - Website URL
-   - Google rating and review count
-   - Whether they have online booking, chat, or AI features
-   - Whether they are family-owned or corporate (SCI/Dignity Memorial, NorthStar, Foundation Partners, etc.)
-   - Their approximate price range if findable
-   - Their tech stack (do they have modern websites? Mobile responsive? Online arrangements?)
-
-2. LOCAL MARKET DATA:
-   - County/metro population
-   - Median age and demographic breakdown
-   - Annual death rate for the county
-   - Number of funeral homes in the service area
-   - Cremation rate for the state/region
-   - Average funeral service cost in this market
-
-3. MARKET TRENDS:
-   - Is this a growing or declining market?
-   - Any new funeral homes opened recently?
-   - Any consolidation activity?
-   - Are competitors investing in technology?
-
-Be specific with names, numbers, and sources.`,
-          3000
-        ),
-
-        // Search 5: News and community presence
-        perplexitySearch(perplexityKey,
-          `Search for ALL recent news, press coverage, and community involvement for "${businessNameHint}" funeral home (${url}):
-
-1. LOCAL NEWS: Any newspaper mentions in the last 2 years. Check local paper archives.
-2. COMMUNITY EVENTS: Sponsorships, charity events, memorial services, grief support groups, holiday remembrance events.
-3. SOCIAL MEDIA ACTIVITY: Facebook posting frequency, Instagram presence, LinkedIn company page. What kind of content do they share?
-4. AWARDS AND RECOGNITION: Any recent awards, "Best of" lists, community recognition?
-5. BUSINESS CHANGES: Any recent expansions, renovations, new services, staff changes?
-6. LEGAL: Any lawsuits, complaints, regulatory actions? (Check state attorney general, FTC, state board of funeral directors)
-7. OBITUARY VOLUME: Check their obituary page or Legacy.com. Approximately how many obituaries per month? This indicates case volume.
-8. PRE-PLANNING EVENTS: Do they hold pre-planning seminars or workshops?
-
-Cite specific articles, dates, and sources.`,
-          2000
-        ),
-
         // Search 6: Pricing intelligence
         perplexitySearch(perplexityKey,
           `Research pricing information for "${businessNameHint}" funeral home (${url}) and their local market:
@@ -694,26 +645,7 @@ Cite specific articles, dates, and sources.`,
 
 Provide actual dollar amounts wherever possible. Cite sources.`,
           2000
-        ),
-
-        // Search 7: Digital presence and technology audit
-        perplexitySearch(perplexityKey,
-          `Audit the digital presence and technology of "${businessNameHint}" funeral home (${url}):
-
-1. WEBSITE ANALYSIS: Is their site mobile-responsive? What platform is it built on? When was it last updated? PageSpeed score if checkable?
-2. SEO: Do they rank on first page of Google for "[city] funeral home"? What keywords do they rank for? Do they have a Google Business Profile? Is it claimed and optimized?
-3. GOOGLE BUSINESS PROFILE: Hours listed, categories, photos count, Q&A section, posts frequency, booking link.
-4. ONLINE BOOKING: Can families schedule consultations online? Is there a contact form? Do they have live chat?
-5. CRM/TECH: Any evidence of GoHighLevel (GHL), Salesforce, HubSpot, or other CRM? Check for www1 subdomains, LeadConnectorHQ markers, or msgsndr CDN references.
-6. EMAIL MARKETING: Any evidence of email newsletters, drip campaigns, Mailchimp, Constant Contact?
-7. CONTENT MARKETING: Do they have a blog? Resource library? How frequently updated?
-8. SOCIAL MEDIA: Platform presence, posting frequency, follower counts, engagement rates.
-9. PARTING PRO / ARRANGEMENT SOFTWARE: Do they use any online arrangement tools?
-10. COMPETITORS TECH: What are nearby competitors using for technology?
-
-Be specific about what they DO and DO NOT have.`,
-          2500
-        ),
+        )
       ]);
 
       searchResults.business = searches[0]?.status === 'fulfilled' ? searches[0].value.content : null;
@@ -956,7 +888,7 @@ Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLSet boo
     try {
       const message = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 2048,
+        max_tokens: 1500,
         messages: [{ role: 'user', content: synthesisPrompt }],
       });
       content = message.content[0].type === 'text' ? message.content[0].text : '';
@@ -1067,7 +999,7 @@ Return ONLY the system prompt text, nothing else. No markdown, no code blocks, j
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
+    max_tokens: 1200,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -1618,7 +1550,7 @@ Return findings as structured JSON:
 Return ONLY valid JSON.`
         }
       ],
-      max_tokens: 2000,
+      max_tokens: 1200,
       temperature: 0.1,
     }),
   });
@@ -1777,7 +1709,7 @@ Return ONLY valid JSON.`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 2000,
+    max_tokens: 1200,
     messages: [{ role: 'user', content: prompt }],
   });
 
