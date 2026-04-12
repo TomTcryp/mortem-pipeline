@@ -236,34 +236,11 @@ SECTION 6 - DIGITAL PRESENCE:
 - CRM (GoHighLevel, HubSpot, etc.)
 - Any arrangement software (Parting Pro, Passare)?
 
-SECTION 7 - COMPETITIVE LANDSCAPE:
-- The 5-7 nearest competitor funeral homes with:
-  * Name, address, website URL
-  * Google rating and review count
-  * Whether they have chat, online booking, or AI
-  * Family-owned vs corporate
-  * Any notable digital advantages
-- Local market data: county population, median age, annual deaths, cremation rate
-- Number of funeral homes in the service area
-
-SECTION 8 - COMMUNITY AND NEWS:
-- Recent news mentions (last 2 years)
-- Community events, sponsorships
-- Obituary volume (check their site and Legacy.com for approximate monthly count)
-- Pre-planning seminars or workshops
-- Awards or recognitions
-
-SECTION 9 - WEBSITE CONTENT SUMMARY:
-- What their homepage says (tagline, messaging)
-- About page content summary
-- Services page content summary
-- Staff page content (names listed)
-- Any testimonials on the site
-- Any unique selling points or differentiators mentioned
+Briefly note any major competitors and recent news mentions.
 
 For EVERY fact, include the source URL. Be exhaustive. This is the primary research source for a sales meeting.` }
         ],
-        max_tokens: 4000,
+        max_tokens: 2000,
         temperature: 0.1,
       }),
     });
@@ -390,7 +367,7 @@ Return ONLY the JSON object, nothing else. No markdown, no code blocks, no comme
           { role: 'system', content: 'You are a precise fact verification agent. You only return verified facts with source URLs. You never guess. You never infer location from phone area codes alone.' },
           { role: 'user', content: prompt }
         ],
-        max_tokens: 1500,
+        max_tokens: 800,
         temperature: 0,
       }),
     });
@@ -406,6 +383,8 @@ Return ONLY the JSON object, nothing else. No markdown, no code blocks, no comme
 // ── Main Research Handler (Enterprise-grade SSE streaming) ──
 
 async function handleResearch(req, res) {
+  const _startTime = Date.now();
+
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
 
@@ -589,7 +568,13 @@ async function handleResearch(req, res) {
     const locationContext = groundTruth && groundTruth.city && groundTruth.state && groundTruth.city !== 'UNVERIFIED'
       ? ` located at ${groundTruth.street_address || ''}, ${groundTruth.city}, ${groundTruth.state} ${groundTruth.zip || ''}`
       : '';
-    send('progress', { phase: 'search', message: `Running 7 deep research searches for "${businessNameHint}"${locationContext}...` });
+    const _elapsed = Date.now() - _startTime;
+    const _timeLeft = 55000 - _elapsed; // 55s budget (5s buffer before 60s limit)
+    const _skipExtraSearches = _timeLeft < 25000; // If less than 25s left, reduce searches
+    if (_skipExtraSearches) {
+      send('progress', { phase: 'search', message: 'Time budget tight - running reduced searches...' });
+    }
+    send('progress', { phase: 'search', message: `Running deep research searches for "${businessNameHint}"${locationContext}...` });
 
     let searchResults = { business: null, reviews: null, people: null, competitors: null, news: null, pricing: null, digital: null };
 
@@ -971,7 +956,7 @@ Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLSet boo
     try {
       const message = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 2048,
         messages: [{ role: 'user', content: synthesisPrompt }],
       });
       content = message.content[0].type === 'text' ? message.content[0].text : '';
