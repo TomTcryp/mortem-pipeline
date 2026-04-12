@@ -5,7 +5,7 @@ function getClient(overrideKey) {
   const apiKey = overrideKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('No Anthropic API key configured. Set ANTHROPIC_API_KEY env var or provide via Settings.');
   return new Anthropic({ apiKey });
-}
+} 
 
 // ── Deep Research Utilities ──
 
