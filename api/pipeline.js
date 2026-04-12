@@ -404,6 +404,7 @@ async function handleResearch(req, res) {
   try {
     // Extract initial business name hint from URL
     let businessNameHint = '';
+    let content = '';
     try { businessNameHint = new URL(url).hostname.replace('www.', '').split('.')[0].replace(/-/g, ' '); } catch {}
 
     // ── STEP 0: PERPLEXITY DEEP RESEARCH (PRIMARY DATA SOURCE) ──
