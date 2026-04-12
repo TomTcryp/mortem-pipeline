@@ -1,3 +1,4 @@
+// timeout fix
 import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 
@@ -961,15 +962,22 @@ Based ONLY on the above real data, compile and return a JSON object. Return ONLY
   "data_freshness": "assessment of how current the data is"
 }
 
-Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLY the JSON.`;
+Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONL    // Send keepalive pings during synthesis to prevent SSE/Vercel timeout
+    const keepalive = setInterval(() => {
+      send('progress', { phase: 'compile', message: 'Still compiling research profile...' });
+    }, 8000);
 
-    const message = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
-      messages: [{ role: 'user', content: synthesisPrompt }],
-    });
-
-    const content = message.content[0].type === 'text' ? message.content[0].text : '';
+    try {
+      const message = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: synthesisPrompt }],
+      });
+      content = message.content[0].type === 'text' ? message.content[0].text : '';
+    } finally {
+      clearInterval(keepalive);
+    }
+[0].text : '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       send('error', { message: 'Could not parse research results from Claude' });
