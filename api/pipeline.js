@@ -889,7 +889,7 @@ Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLSet boo
     try {
       const message = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
+        max_tokens: 3000,
         messages: [{ role: 'user', content: synthesisPrompt }],
       });
       content = message.content[0].type === 'text' ? message.content[0].text : '';
