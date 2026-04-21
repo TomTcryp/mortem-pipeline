@@ -652,10 +652,9 @@ Provide actual dollar amounts wherever possible. Cite sources.`,
       searchResults.business = searches[0]?.status === 'fulfilled' ? searches[0].value.content : null;
       searchResults.reviews = searches[1]?.status === 'fulfilled' ? searches[1].value.content : null;
       searchResults.people = searches[2]?.status === 'fulfilled' ? searches[2].value.content : null;
-      searchResults.competitors = searches[3]?.status === 'fulfilled' ? searches[3].value.content : null;
-      searchResults.news = searches[4]?.status === 'fulfilled' ? searches[4].value.content : null;
-      searchResults.pricing = searches[5]?.status === 'fulfilled' ? searches[5].value.content : null;
-      searchResults.digital = searches[6]?.status === 'fulfilled' ? searches[6].value.content : null;
+      searchResults.pricing = searches[3]?.status === 'fulfilled' ? searches[3].value.content : null;
+      // Note: competitors, news, and digital searches were removed to save time budget.
+      // Their slots remain null, which is handled gracefully in the synthesis prompt.
 
       const foundCount = Object.values(searchResults).filter(v => v).length;
       send('progress', { phase: 'search', message: `Deep research complete. Got results from ${foundCount}/7 searches.` });
@@ -666,9 +665,16 @@ Provide actual dollar amounts wherever possible. Cite sources.`,
     // ── STEP 3: Enterprise-grade synthesis with Claude ──
     send('progress', { phase: 'compile', message: 'Analyzing all research data and compiling enterprise profile...' });
 
-    const websiteContentStr = Object.entries(websiteContent)
-      .map(([path, text]) => `=== PAGE: ${baseUrl}${path} ===\n${text}`)
-      .join('\n\n');
+    // Cap total website content to prevent synthesis prompt from exceeding Claude's
+    // practical processing time. With 31+ pages at 6000 chars each, the prompt can
+    // balloon to 200K+ chars and the API call exceeds Vercel's 60s timeout.
+    const MAX_SYNTHESIS_CONTENT = 30000; // ~30K chars total for all page content
+    const pageEntries = Object.entries(websiteContent);
+    const perPageLimit = Math.max(800, Math.floor(MAX_SYNTHESIS_CONTENT / Math.max(pageEntries.length, 1)));
+    const websiteContentStr = pageEntries
+      .map(([path, text]) => `=== PAGE: ${baseUrl}${path} ===\n${text.substring(0, perPageLimit)}`)
+      .join('\n\n')
+      .substring(0, MAX_SYNTHESIS_CONTENT);
 
     const synthesisPrompt = `You are a senior business intelligence analyst compiling a comprehensive prospect dossier. You have been given REAL data from Perplexity deep research (your PRIMARY source), direct website crawling, subdomain probing, ground-truth verification, and 7 parallel live web searches. Your job is to compile this into a thorough, verified research profile that a sales team can rely on for meeting preparation.
 
@@ -687,7 +693,7 @@ CRITICAL RULES:
 ${groundTruth ? JSON.stringify(groundTruth, null, 2) : 'Ground truth verification not available, use website data and flag low confidence'}
 
 === PERPLEXITY DEEP RESEARCH (PRIMARY SOURCE - comprehensive web intelligence) ===
-${deepResearchData || 'Deep research not available (no Perplexity key). Relying on direct crawl and targeted searches only.'}
+${(deepResearchData || 'Deep research not available (no Perplexity key). Relying on direct crawl and targeted searches only.').substring(0, 8000)}
 
 === WEBSITE CONTENT (supplementary direct crawl of ${url}) ===
 Pages found: ${foundPages.join(', ')}
@@ -716,25 +722,25 @@ ${gplContent || 'No pricing page found on website'}
 ${prePlanContent || 'No pre-planning page found on website'}
 
 === WEB SEARCH 1: BUSINESS DEEP DIVE ===
-${searchResults.business || 'No search results available'}
+${(searchResults.business || 'No search results available').substring(0, 2500)}
 
 === WEB SEARCH 2: REVIEWS & REPUTATION ===
-${searchResults.reviews || 'No search results available'}
+${(searchResults.reviews || 'No search results available').substring(0, 2500)}
 
 === WEB SEARCH 3: PEOPLE & STAFF ===
-${searchResults.people || 'No search results available'}
+${(searchResults.people || 'No search results available').substring(0, 2500)}
 
 === WEB SEARCH 4: COMPETITORS & MARKET ===
-${searchResults.competitors || 'No search results available'}
+${(searchResults.competitors || 'No search results available').substring(0, 2500)}
 
 === WEB SEARCH 5: NEWS & COMMUNITY ===
-${searchResults.news || 'No search results available'}
+${(searchResults.news || 'No search results available').substring(0, 2000)}
 
 === WEB SEARCH 6: PRICING INTELLIGENCE ===
-${searchResults.pricing || 'No search results available'}
+${(searchResults.pricing || 'No search results available').substring(0, 2000)}
 
 === WEB SEARCH 7: DIGITAL PRESENCE AUDIT ===
-${searchResults.digital || 'No search results available'}
+${(searchResults.digital || 'No search results available').substring(0, 2000)}
 
 Based ONLY on the above real data, compile and return a JSON object. Return ONLY valid JSON (no markdown, no code blocks, no explanation before or after). Use this structure:
 
@@ -881,20 +887,52 @@ Based ONLY on the above real data, compile and return a JSON object. Return ONLY
 
 Set boolean flags based on ACTUAL evidence found. Be thorough. Return ONLSet boolean flags based on ACTUAL evidence found. Be thorough. Return ONLY the JSON.`;
 
-    // Send keepalive pings during synthesis to prevent SSE/Vercel timeout
-    const keepalive = setInterval(() => {
-      send('progress', { phase: 'compile', message: 'Still compiling research profile...' });
-    }, 8000);
+    // ── TIME BUDGET CHECK ──
+    // Vercel Hobby has a hard 60s limit. Reserve time for synthesis API call.
+    const _synthElapsed = Date.now() - _startTime;
+    const _synthTimeLeft = 55000 - _synthElapsed; // 5s safety buffer
+    let synthesisMaxTokens = 3000;
 
-    try {
-      const message = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 3000,
-        messages: [{ role: 'user', content: synthesisPrompt }],
+    if (_synthTimeLeft < 12000) {
+      // Less than 12s left - not enough time for synthesis. Build minimal profile
+      // from ground truth and search data without calling Claude.
+      send('progress', { phase: 'compile', message: `Time budget critical (${Math.round(_synthTimeLeft / 1000)}s left). Building profile from raw data...` });
+      content = JSON.stringify({
+        business_name: businessNameHint || 'Unknown',
+        phone: contactInfo?.phone || groundTruth?.phone || 'Not found',
+        email: contactInfo?.email || groundTruth?.email || 'Not found',
+        address: groundTruth?.street_address || 'Not found',
+        city: groundTruth?.city || 'Not found',
+        state: groundTruth?.state || 'Not found',
+        website_url: url,
+        website_pages_found: foundPages,
+        services: ['Funeral Services', 'Cremation Services'],
+        confidence_level: 'low',
+        research_gaps: ['Synthesis skipped due to time constraints - raw data available'],
+        _time_budget_exceeded: true,
       });
-      content = message.content[0].type === 'text' ? message.content[0].text : '';
-    } finally {
-      clearInterval(keepalive);
+    } else {
+      // Enough time - run synthesis, but reduce max_tokens if tight on time
+      if (_synthTimeLeft < 25000) {
+        synthesisMaxTokens = 2000; // Faster response with fewer tokens
+        send('progress', { phase: 'compile', message: `Time budget tight (${Math.round(_synthTimeLeft / 1000)}s left). Running fast synthesis...` });
+      }
+
+      // Send keepalive pings during synthesis to prevent SSE/Vercel timeout
+      const keepalive = setInterval(() => {
+        send('progress', { phase: 'compile', message: 'Still compiling research profile...' });
+      }, 8000);
+
+      try {
+        const message = await client.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: synthesisMaxTokens,
+          messages: [{ role: 'user', content: synthesisPrompt }],
+        });
+        content = message.content[0].type === 'text' ? message.content[0].text : '';
+      } finally {
+        clearInterval(keepalive);
+      }
     }
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
