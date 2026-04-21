@@ -1087,7 +1087,7 @@ ${sarahPrompt}`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 4000,
+    max_tokens: 6000,
     messages: [{ role: 'user', content: htmlPrompt }],
   });
 
