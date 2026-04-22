@@ -1707,11 +1707,18 @@ async function handleOutreach(req, res) {
   const client = getClient(req.headers['x-api-key-override']);
 
   const ownerDetails = (research.owners_and_directors || []).map(p => `${p.name} (${p.role})`).join(', ') || research.owner_name || 'the team';
-  const topGap = research.digital_presence_assessment?.critical_gaps?.[0] || 'after-hours response capability';
+  // Sarah AI is the product being pitched
   const reviewInfo = research.google_reviews?.rating ? `${research.google_reviews.rating} stars from ${research.google_reviews.count} Google reviews` : '';
   const competitorMention = research.competitors?.[0]?.name || '';
 
-  const prompt = `You are Tom Magee at Mortem AI, crafting hyper-personalized outreach messages for a funeral home prospect. These messages must demonstrate deep knowledge of their business. Generic messages get ignored. Specific, research-backed messages get meetings.
+  const prompt = `You are Tom Magee at Mortem AI, crafting hyper-personalized outreach messages for a funeral home prospect. You are pitching SARAH AI, a 24/7 AI assistant chatbot built specifically for their funeral home. The demo link shows Sarah already customized with their branding, services, and information.
+
+WHAT SARAH AI DOES:
+- Answers families' questions 24/7 (after-hours calls are a huge pain point for funeral homes)
+- Handles pre-planning inquiries, service questions, and initial arrangements
+- Trained on the specific funeral home's services, pricing, staff, and values
+- Captures lead info (name, phone, needs) and routes to the funeral director
+- Compassionate, professional tone that matches the funeral home's brand
 
 PROSPECT INTELLIGENCE:
 - Business: ${research.business_name}
@@ -1720,25 +1727,22 @@ PROSPECT INTELLIGENCE:
 - Phone: ${research.phone}
 - City/State: ${research.city || ''}, ${research.state || ''}
 - Services: ${(research.services || []).join(', ')}
-- Service Area: ${research.service_area || 'local area'}
-- Demo URL: ${demoUrl}
-- Google Reviews: ${reviewInfo || 'Not found'}
-- Top Digital Gap: ${topGap}
-- Main Competitor: ${competitorMention || 'local competitors'}
-- Website Tech: ${(research.tech_stack || []).slice(0, 5).join(', ')}
-- Has Chat: ${research.has_chat_widget || false}
-- Has Booking: ${research.has_online_booking || false}
 - Founded: ${research.founded || 'established'}
 - Ownership: ${research.ownership_type || 'independent'}
+- Google Reviews: ${reviewInfo || 'Not found'}
+- Demo URL: ${demoUrl}
+- Currently has chat widget: ${research.has_chat_widget || false}
+- Currently has online booking: ${research.has_online_booking || false}
 
 OUTREACH RULES:
+- The pitch is SARAH AI, not website redesign or mobile optimization
 - Every message must reference at least 2 specific details about their business
 - Never use em dashes
 - Sound like a real person, not a template
-- The demo URL is the hook, every message should drive to it
+- The demo URL shows Sarah already built for their funeral home, that is the hook
 - Be respectful of the funeral industry, warm but professional
 - Keep it brief, busy funeral directors do not read long emails
-- Reference their specific digital gaps without being condescending
+- Focus on the value of 24/7 family support and lead capture, not tech gaps
 
 Generate messages in this exact JSON format (ONLY JSON, no markdown):
 {
