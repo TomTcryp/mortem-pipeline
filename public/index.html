@@ -936,7 +936,7 @@
         // Phase 5: Deploy
         phaseStatuses[5] = 'running'; renderPhases();
         addLog('Deploying to Netlify...', 5);
-        const siteName = research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-sarah-demo';
+        const siteName = research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/--+/g, '-') + '-sarah-demo';
         const deployData = await apiCall('deploy', { html:demo.html, siteName });
         pipelineData.deployUrl = deployData.url;
         addLog('Deployed: ' + deployData.url, 5);
@@ -1051,7 +1051,7 @@
         });
         pipelineData.meetingPrep = result;
         addLog('Meeting prep regenerated with fact-checked data', 6);
-        const siteName = pipelineData.research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '-meeting-prep';
+        const siteName = pipelineData.research.business_name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/--+/g, '-') + '-meeting-prep';
         const deployResult = await apiCall('deploy', { html: result.html, siteName });
         pipelineData.meetingPrepUrl = deployResult.url;
         addLog('Updated meeting prep deployed: ' + deployResult.url, 6);
