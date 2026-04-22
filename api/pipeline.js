@@ -1120,12 +1120,15 @@ ${logoInstruction}
 
 Return ONLY the complete, valid HTML string. No markdown, no code blocks, no explanations. Start with <!DOCTYPE html> and end with </html>.
 
-Sarah AI System Prompt (embed as JS constant):
-${sarahPrompt}`;
+Sarah AI System Prompt: You MUST include a JavaScript constant in the page. Use exactly this code:
+const SARAH_SYSTEM_PROMPT = "__SARAH_PROMPT_PLACEHOLDER__";
+The placeholder will be replaced server-side with the real prompt after generation.
+
+Sarah is a warm, empathetic funeral home assistant chatbot. Design the chat UI accordingly.`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 6000,
+    max_tokens: 5000,
     messages: [{ role: 'user', content: htmlPrompt }],
   });
 
@@ -1133,6 +1136,10 @@ ${sarahPrompt}`;
   if (html.includes('```html')) html = html.replace(/```html\n?/, '').replace(/\n?```/, '');
   else if (html.includes('```')) html = html.replace(/```\n?/, '').replace(/\n?```/, '');
   html = html.trim();
+
+  // Inject the full sarahPrompt, replacing the placeholder
+  const safePrompt = sarahPrompt.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+  html = html.replace('__SARAH_PROMPT_PLACEHOLDER__', safePrompt);
   if (!html.startsWith('<!DOCTYPE')) throw new Error('Generated HTML does not start with <!DOCTYPE');
   return res.status(200).json({ html });
 }
