@@ -1,6 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import crypto from 'crypto';
 
+// Meeting Prep HTML Template (CSS served from /meeting-prep.css)
+function MEETING_PREP_HEADER(title) {
+  return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>' + title + ' - Pre-Meeting Intelligence Brief</title>\n<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">\n<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">\n<link rel="stylesheet" href="https://mortem-pipeline.vercel.app/meeting-prep.css">\n</head>\n<body>\n';
+}
+
 function getClient(overrideKey) {
   const apiKey = overrideKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('No Anthropic API key configured. Set ANTHROPIC_API_KEY env var or provide via Settings.');
@@ -1377,156 +1382,74 @@ RAW SEARCH EXCERPTS (for direct quotes, citations, named facts)
 ${rawSearchBlock ? rawSearchBlock.substring(0, 12000) : 'Not available'}
 
 ============================================================
-DESIGN SYSTEM (match HKH visual language exactly)
+OUTPUT FORMAT
 ============================================================
-- Single complete HTML file with all CSS inline in a single <style> block at the top
-- Google Fonts: EB Garamond (serif, weights 400,500,600, ital 400 500) for all headings and display text, Poppins (sans-serif, weights 300,400,500,600) for all body text
-- Color palette (use direct hex values with !important, no CSS variables in the output):
-  * Dark primary: #1a1818 (Mortem dark)
-  * Gold accent: #c4922a (Mortem gold)
-  * Gold light: #d9a84a
-  * Burgundy narrative accent: #9a3236 (for strategic insight callouts)
-  * Burgundy light: #c66a6e
-  * Burgundy deep: #3d1214 (for cover background)
-  * Cream background: #f7f3ef
-  * White content: #ffffff
-  * Text primary: #1e1e1e
-  * Text muted: #555555
-  * Border: #e0d5cc
-- Layout structure (match HKH):
-  * Cover header: dark burgundy-deep background with radial gradients, top bar with Mortem logo and doc label, cover-body with eyebrow dot, H1 with EB Garamond serif, subtitle, 4-item meta row divided by vertical rules
-  * Content wrap: max-width 960px centered, padding 56px 48px 96px
-  * Section pattern: section-label eyebrow in burgundy uppercase letterspaced + EB Garamond H2 with burgundy italic em + body content
-  * Horizontal rule dividers between major sections
-  * Card grids (2 and 3 columns) with top border in burgundy
-  * Dark boxes: #1a1818 background, burgundy-light label, white/78% body text, radial gradient decoration
-  * Burgundy boxes: #9a3236 background for strategic narrative blocks
-  * Quote blocks: cream tinted background with burgundy left border, EB Garamond italic
-  * Scope tables: dark header with burgundy-light accent column, alternating row colors, clean borders
-  * Pricing boxes: 2-col grid, featured box with burgundy border and "Your Plan" tag
-  * ROI strip: dark background with 4 cells, one highlighted in burgundy, with roi-note footer
-  * Timeline: vertical line with gradient fade, dots, week labels in burgundy
-  * Proof grid: 2-col cards with burgundy stars, serif italic quote, uppercase attribution
-  * Steps list: numbered circles in burgundy
-  * Signoff: bordered top, Tom Magee details on left, Mortem badge on right
-- Intro-block style: white background, burgundy left border 4px, padding 24px 28px
-- Callout style: soft cream background, gold left border 3px, for notes and warnings
-- Mortem AI logo URL: https://storage.googleapis.com/msgsndr/KwHyQsuzPI6o5CiZfPfN/media/689ef6fa5dc21c2e15d6807f.png
-- Responsive: at 680px collapse grids to 1 column, stack meta row, adjust cover title to 34px
-- Print-friendly: page breaks before major sections
+Generate ONLY the inner HTML content for the <body> tag. Do NOT include <!DOCTYPE>, <html>, <head>, <style>, or <body> tags. The CSS stylesheet is pre-built and will be wrapped around your output automatically.
+
+Use these CSS class names in your HTML:
+
+COVER: <div class="cover"><div class="cover-topbar">...</div><div class="cover-body"><div class="cover-eyebrow">...</div><h1 class="cover-title">... <em>italic angle</em></h1><p class="cover-subtitle">...</p><div class="cover-meta"><div class="cover-meta-item"><span class="label">...</span><span class="value">...</span></div>...</div></div></div>
+SECTIONS: <div class="content-wrap"><hr><div class="section-label">LABEL</div><h2 class="section-title">Title <em>italic</em></h2>...</div>
+CARDS: <div class="card-grid card-grid-3"><div class="card"><h4>Title</h4><p>Content</p></div>...</div> (use card-grid-2 for 2 columns)
+DARK BOX: <div class="dark-box"><div class="dark-box-label">Label</div><p>Content</p></div>
+BURGUNDY BOX: <div class="burgundy-box"><p>Strategic narrative content</p></div>
+QUOTE: <div class="quote-block"><p>"Quote text"</p><cite>Attribution</cite></div>
+TABLE: <table class="scope-table"><thead><tr><th>Col</th></tr></thead><tbody><tr><td>Data</td></tr></tbody></table>
+PRICING: <div class="pricing-grid"><div class="pricing-box"><h3>Title</h3><div class="price">$X</div></div><div class="pricing-box pricing-featured"><span class="pricing-tag">Your Plan</span>...</div></div>
+ROI: <div class="roi-strip"><div class="roi-cell"><span class="roi-label">Label</span><span class="roi-value">Value</span></div><div class="roi-cell roi-highlight">...</div></div><p class="roi-note">Note</p>
+INTRO BLOCK: <div class="intro-block"><p>Content</p></div>
+CALLOUT: <div class="callout"><p>Content</p></div>
+GAP: <div class="gap-note">GAP: specific missing data</div>
+PROOF: <div class="proof-grid"><div class="proof-card"><div class="proof-stars">stars</div><blockquote>"Quote"</blockquote><cite>SOURCE</cite></div></div>
+STEPS: <ol class="steps-list"><li class="step">Action</li></ol>
+SIGNOFF: <div class="signoff"><div class="signoff-left"><h3>Tom Magee</h3><p class="signoff-role">Co-Founder, Mortem AI</p></div><div class="signoff-badge">Mortem AI</div></div>
+LOGO: https://storage.googleapis.com/msgsndr/KwHyQsuzPI6o5CiZfPfN/media/689ef6fa5dc21c2e15d6807f.png
 
 ============================================================
-DOCUMENT STRUCTURE (17 sections, each with at least 3 named specifics)
+DOCUMENT SECTIONS (generate all 17, each with 3+ named specifics)
 ============================================================
-
-SECTION 1: COVER HEADER
-- Dark burgundy-deep background (#3d1214) with radial gradients
-- Top bar: Mortem AI logo (left), "Pre-Meeting Briefing / Confidential" (right)
-- Eyebrow: small burgundy dot plus "Prepared for ${research.business_name}"
-- H1: "[Business Name in EB Garamond]: [strategic angle in burgundy italic]"
-  Example: "Hillside Chapel: Meeting 2026 Families Where They Already Are."
-- Subtitle: one-line strategic framing
-- Meta row (4 items separated by vertical rules): Contact, Location, Prepared by, Date
-- Bottom rule: 3px linear gradient from burgundy to burgundy-light fading to transparent
-
-SECTION 2: STRATEGIC OPENING (intro-block)
-A 3-to-4 sentence opener that pulls ONE specific detail from reviews, ONE specific detail from their website, and ONE strategic observation that ties them to the meeting angle. This section must demonstrate Tom has done his homework in the first paragraph.
-
-SECTION 3: LOCKED GROUND TRUTH PANEL
-A compact card confirming verified NAP. Show business name, address, city/state/zip, phone, website, all locations, and a small note "Verified via [source]" with confidence level.
-
-SECTION 4: THE OPPORTUNITY
-Three-card grid framing the problem specifically for this business:
-- Card 1: "AI Search Gap" with a specific observation about THIS business's searchability
-- Card 2: "After-Hours Gap" with their specific coverage situation
-- Card 3: "[Specific third gap for this business]" based on what the audit found
-Followed by a burgundy quote block with a strategic observation about the opportunity.
-
-SECTION 5: COMPANY DEEP DIVE
-Narrative paragraph (founding year, history, generation) followed by a 3-card grid:
-- Card: Case Volume Estimate (with methodology explaining how it was derived)
-- Card: Revenue Estimate (conservative, using case volume x average service value)
-- Card: Staff & Operational Profile
-Followed by a detailed location breakdown table if multi-location.
-
-SECTION 6: CONTACT INTELLIGENCE
-Dark box with everything known about ${contact}. If nothing is known, acknowledge that and list 5 discovery questions to ask in the first 5 minutes of the call. Include predicted communication style and recommended approach angle.
-
-SECTION 7: WHY SARAH FITS (burgundy box narrative)
-A 2-paragraph narrative in the burgundy strategic box style. First paragraph pulls directly from their reviews/website to establish what they already do well. Second paragraph connects that culture to Sarah's design philosophy. This is the emotional connection that makes the rest of the pitch land.
-
-SECTION 8: DIGITAL AUDIT (scope table)
-Dark-header scope table with columns: Category | Current State | Gap Level | Sarah Solution
-Minimum 14 rows covering: Website Platform, Mobile Responsiveness, Page Load Speed, SEO/Local Search, Google Business Profile, Online Booking, Live Chat/After-Hours, AI-Ready Content, CRM/Lead Management, Email Marketing, Pre-Planning Digital Tools, Arrangement Software, Content Marketing, Social Media, Review Management, Analytics Tracking, Accessibility.
-Every row must note what was ACTUALLY found (or explicitly not found) for THIS business.
-
-SECTION 9: COMPETITIVE LANDSCAPE
-Scope table of 5-7 real competitors with columns: Name | Distance | Rating | Reviews | Chat | Booking | AI | Ownership | Notes
-Followed by a first-mover advantage paragraph. If no competitors were found, write "GAP: competitor research incomplete" and list specific pre-meeting research tasks.
-
-SECTION 10: FAMILY-NEED GAP ANALYSIS
-Scope table with columns: What Families Need | Current State at ${research.business_name} | With Sarah | Impact
-Minimum 10 rows. Every row specific to THIS business.
-
-SECTION 11: PRICING AND ROI MODEL
-Two pricing boxes side by side:
-- One-time setup: $1,495 with breakdown of included items
-- Monthly subscription: $${research.locations && research.locations.length > 1 ? (397 + 200 * (research.locations.length - 1)) : 397} (${research.locations && research.locations.length > 1 ? 'base $397 + $200 per additional location for ' + research.locations.length + ' locations' : 'single location'}) with breakdown
-Followed by dark ROI strip (4 cells): Setup Investment | Monthly Cost | Avg At-Need Revenue | Break-Even Point (show "1 call" if possible)
-Followed by a roi-note with a reference proof point and the calculated case-volume-based projection.
-
-SECTION 12: TALK TRACKS (scripted dialogue, not bullet summaries)
-Subsection 12a: OPENING (3 scripted options labeled Option A/B/C, each a 2-3 sentence verbatim opening line Tom can say)
-Subsection 12b: DISCOVERY QUESTIONS (8 questions, each customized to THIS business)
-Subsection 12c: OBJECTION HANDLING (6 objections with scripted responses that quote their review themes)
-Subsection 12d: DEMO WALKTHROUGH SCRIPT (5-step walkthrough with exact lines to say at each step)
-Subsection 12e: CLOSING (3 closing approaches with exact language)
-
-SECTION 13: PROOF POINTS (proof grid of review quotes)
-2-column grid of 4 real review quote cards. Each card: burgundy star row + serif italic quote in quotation marks + uppercase attribution (e.g. "Google Review, Hartford Location"). Pull REAL quotes from their actual reviews wherever possible. If review quotes could not be extracted, write "GAP: actual review quotes could not be captured. Pull 4 specific quotes from their Google Business Profile before the meeting" in a callout instead.
-Followed by a burgundy box paragraph: "What this means for the Sarah pitch".
-
-SECTION 14: PRE-MEETING CHECKLIST
-Numbered steps-list with 12-15 specific actions Tom must take in the 24 hours before the meeting. Each action must be specific to THIS prospect (e.g. "Re-check Google Business Profile for ${research.business_name} tonight and note any new reviews posted this week" not "check reviews").
-
-SECTION 15: EMAIL SEQUENCE
-Three email blocks:
-- Pre-meeting email (send 24 hours before): full subject and body, under 150 words
-- Post-meeting follow-up (send within 2 hours after meeting): full subject and body referencing specifics discussed
-- Second follow-up (send 3 days later if no response): full subject and body
-Each email must reference at least 2 specific business details and include the demo link if available.
-
-SECTION 16: RESEARCH SOURCES AND CONFIDENCE (intro-block)
-A paragraph listing what was verified, what was inferred, what remained unknown, and overall confidence level. End with specific pre-meeting research tasks to close remaining gaps.
-
-SECTION 17: SIGNOFF
-- Horizontal rule at top
-- Left: "Tom Magee" in bold, "Co-Founder, Mortem AI" subtitle, one-paragraph signoff text, contact details (mortemai.com and tom@mortemai.com)
-- Right: Mortem badge (dark pill with logo)
+1. COVER HEADER: eyebrow, H1, subtitle, 4-item meta row (Contact, Location, Prepared by Tom Magee, Date)
+2. STRATEGIC OPENING (intro-block): 3-4 sentences with specific review/website/strategic details
+3. GROUND TRUTH PANEL: verified NAP card
+4. THE OPPORTUNITY: 3-card grid + burgundy quote block
+5. COMPANY DEEP DIVE: narrative + 3-card grid (case volume, revenue, staff)
+6. CONTACT INTELLIGENCE: dark box with contact details or discovery questions
+7. WHY SARAH FITS: burgundy box 2-paragraph narrative
+8. DIGITAL AUDIT: scope table, min 14 rows
+9. COMPETITIVE LANDSCAPE: scope table 5-7 competitors
+10. FAMILY-NEED GAP ANALYSIS: scope table, min 10 rows
+11. PRICING AND ROI: pricing grid + ROI strip (setup $1,495, monthly $397+ per location)
+12. TALK TRACKS: scripted openings, 8 discovery Qs, 6 objection responses, demo walkthrough, closing
+13. PROOF POINTS: proof grid 4 review quote cards + burgundy interpretation
+14. PRE-MEETING CHECKLIST: steps list, 12-15 specific actions
+15. EMAIL SEQUENCE: 3 emails (pre-meeting, follow-up, second follow-up)
+16. RESEARCH SOURCES: intro-block summary
+17. SIGNOFF: Tom Magee, Co-Founder, Mortem AI, tom@mortemai.com
 
 ============================================================
-CRITICAL ENFORCEMENT RULES
+RULES
 ============================================================
-1. Every section must contain AT LEAST 3 named-specific facts. A "named specific" means: a named person, a named place, a specific date or year, a specific dollar amount, a direct quote in quotation marks, a named integration, a URL, a specific rating number, or a specific count. Generic phrases like "quality service", "established provider", "caring team", "modern technology", "comprehensive offerings" count as ZERO and must be replaced.
-2. Every claim must trace back to the research data, ground truth, or raw search excerpts provided above. Do NOT fabricate.
-3. Direct quotes from reviews go in quotation marks with source attribution.
-4. Location mentions MUST match ground truth NAP exactly. Never place the business in a city/state different from ground truth.
-5. If a section cannot reach 3 named specifics, write a visible GAP note in that section explaining exactly what is missing and the pre-meeting research task to close it. Do NOT pad with filler.
-6. Never use em dashes anywhere. Use commas, periods, colons, or "to" instead.
-7. Write in the voice of a senior strategist who has studied this business for hours, not a template filler.
-8. Minimum 1600 lines of HTML. Maximum density per section. No whitespace padding.
-9. Every dollar amount, rating, review count, date, and named person must come from the research data.
-10. Include proper meta tags, favicon emoji, and a print stylesheet.
+1. Every section: 3+ named specifics (people, dates, dollars, quotes, URLs). No generic filler.
+2. All claims trace to research data. Do NOT fabricate.
+3. Quotes in quotation marks with source attribution.
+4. Location must match ground truth. Never use em dashes.
+5. If section lacks 3 specifics, write a gap-note.
+6. Write as a senior strategist, not a template filler.
+7. Use <hr> between major sections.
 
-Return ONLY the complete HTML document. Start with <!DOCTYPE html> and end with </html>. No markdown code fences, no explanation, no commentary before or after the HTML.`;
+Return ONLY body HTML. No DOCTYPE, no head, no style. Start with <div class="cover"> end with signoff </div>.`;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  // Send the HTML template header as the first chunk
+  const templateHeader = MEETING_PREP_HEADER(research.business_name || 'Meeting Prep');
+  res.write(`data: ${JSON.stringify({ type: 'chunk', text: templateHeader })}\n\n`);
+
   const stream = await client.messages.stream({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 20000,
+    max_tokens: 16000,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -1535,6 +1458,10 @@ Return ONLY the complete HTML document. Start with <!DOCTYPE html> and end with 
       res.write(`data: ${JSON.stringify({ type: 'chunk', text: event.delta.text })}\n\n`);
     }
   }
+
+  // Send template footer to close the HTML document
+  const templateFooter = '\n</body>\n</html>';
+  res.write(`data: ${JSON.stringify({ type: 'chunk', text: templateFooter })}\n\n`);
   res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
   res.end();
 }
